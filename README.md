@@ -6,6 +6,8 @@ AirGlance is a small macOS menu-bar app that shows the readings of your **Amazon
 (score, PM2.5, PM10, VOC, carbon monoxide, temperature, humidity) with traffic lights, history
 charts and notifications – without opening the Alexa app on your phone.
 
+<p align="center"><img src="docs/screenshot.webp" width="560" alt="AirGlance dashboard opened from the menu bar: air quality score 91/100 with traffic lights and trend lines for PM2.5, PM10, VOC, carbon monoxide, temperature and humidity"></p>
+
 > **Unofficial project.** Not affiliated with, endorsed or supported by Amazon. "Amazon", "Alexa"
 > and "Echo" are trademarks of Amazon.com, Inc. The app uses the same *undocumented* Alexa web API
 > as the Alexa website and the Home Assistant integration

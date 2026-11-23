@@ -233,10 +233,25 @@ let kLEDColors: [AirStatus: NSColor] = [
 
 /// Menu-bar icon: slim outline of the air quality monitor; its status LED shows the device colour
 /// (hollow when the state is unknown). Sized and weighted like SF Symbols in the menu bar.
-func trafficLightImage(_ status: AirStatus) -> NSImage {
-    let img = NSImage(size: NSSize(width: 18, height: 16), flipped: true) { _ in
-        // drawn at render time -> outline adapts to light/dark menu bar
-        let ink = NSColor.labelColor
+///
+/// Rendered into real bitmaps (1x + 2x) for a light or a dark menu bar instead of a drawing closure:
+/// since macOS 26 the system may host / re-show menu-bar items itself (e.g. when a menu-bar manager
+/// or System Settings hides and shows an app), and it needs ready-made image data for that.
+func trafficLightImage(_ status: AirStatus, dark: Bool) -> NSImage {
+    let size = NSSize(width: 18, height: 16)
+    let img = NSImage(size: size)
+    for scale in [1, 2] as [CGFloat] {
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { continue }
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        let t = NSAffineTransform()            // flip: draw with y growing downwards
+        t.translateX(by: 0, yBy: size.height)
+        t.scaleX(by: 1, yBy: -1)
+        t.concat()
+        let ink = dark ? NSColor(white: 1, alpha: 0.92) : NSColor(white: 0, alpha: 0.85)
         ink.setStroke()
         let body = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 2.5, width: 15, height: 11), xRadius: 3, yRadius: 3)
         body.lineWidth = 1.0
@@ -254,7 +269,8 @@ func trafficLightImage(_ status: AirStatus) -> NSImage {
             ink.withAlphaComponent(0.6).setStroke()
             hollow.stroke()
         }
-        return true
+        NSGraphicsContext.restoreGraphicsState()
+        img.addRepresentation(rep)
     }
     img.isTemplate = false
     img.accessibilityDescription = "AirGlance"
@@ -438,6 +454,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let watcher = StatusWatcher()
     var lastHealth: String?   // ok | stale | login_required – for one-off notifications
     var monitorCount = 0
+    var visibilityObservation: NSKeyValueObservation?
+    var shownIcon: (status: AirStatus, dark: Bool)?
+    var currentStatus: AirStatus = .unknown
+    var appearanceObservation: NSKeyValueObservation?
+
+    /// Small diagnostics log of the Swift side (logs/app.log next to the backend's server.log).
+    func appLog(_ text: String) {
+        let url = backend.logURL.deletingLastPathComponent().appendingPathComponent("app.log")
+        let line = "\(ISO8601DateFormatter().string(from: Date())) \(text)\n"
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+        else { try? Data(line.utf8).write(to: url) }
+    }
+
+    /// Only touch the button when the colour really changes – constant image swaps make the item
+    /// re-layout every minute, which can interfere with tools that move menu-bar items.
+    func setIcon(_ status: AirStatus) {
+        currentStatus = status
+        guard let button = statusItem.button else { return }
+        let dark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if let shown = shownIcon, shown.status == status, shown.dark == dark { return }
+        shownIcon = (status, dark)
+        button.image = trafficLightImage(status, dark: dark)
+    }
     var contentHeight: CGFloat = 0   // reported by the page (height of its content)
     let notifier = Notifier()
 
@@ -453,9 +492,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.notifier.send(change, showMonitor: self.monitorCount > 1)
         }
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // fixed width + stable autosave name: macOS (and menu-bar managers such as JustHide) remember
+        // position and visibility per autosave name; without one the item is anonymous ("Item-0")
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.autosaveName = "AirGlance"
+        visibilityObservation = statusItem.observe(\.isVisible, options: [.initial, .new]) { [weak self] item, _ in
+            self?.appLog("menu-bar item visible: \(item.isVisible)")
+        }
         if let b = statusItem.button {
-            b.image = trafficLightImage(.unknown)
+            setIcon(.unknown)
+            // light/dark menu bar (e.g. wallpaper or appearance change): redraw with the matching outline colour
+            appearanceObservation = b.observe(\.effectiveAppearance) { [weak self] _, _ in
+                DispatchQueue.main.async { guard let self else { return }; self.setIcon(self.currentStatus) }
+            }
             b.toolTip = "AirGlance"
             b.target = self
             b.action = #selector(statusClicked(_:))
@@ -651,7 +700,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applyOverview(_ o: [String: Any]?) {
         guard let button = statusItem.button else { return }
-        guard let o else { button.image = trafficLightImage(.unknown); button.toolTip = L("AirGlance: keine Verbindung zum Hintergrunddienst", "AirGlance: no connection to the background service"); return }
+        guard let o else { setIcon(.unknown); button.toolTip = L("AirGlance: keine Verbindung zum Hintergrunddienst", "AirGlance: no connection to the background service"); return }
         let state = o["status"] as? String ?? ""
         let monitors = (o["monitors"] as? [[String: Any]]) ?? []
         monitorCount = monitors.count
@@ -677,8 +726,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if needsLogin { worst = .setup; tip = L("AirGlance: Anmeldung bei Amazon nötig", "AirGlance: Amazon sign-in required") }
         if state == "setup_required" { worst = .setup; tip = L("AirGlance: bitte Monitore auswählen", "AirGlance: choose your monitors") }
         if state == "error" { tip += L("\n(letzter Abruf fehlgeschlagen)", "\n(last update failed)") }
-        button.image = trafficLightImage(worst)
-        button.toolTip = tip
+        setIcon(worst)
+        if button.toolTip != tip { button.toolTip = tip }
         healthChanged(needsLogin ? "login_required" : (allStale && state == "ok") ? "stale" : state == "ok" ? "ok" : nil,
                       loginURL: o["login_url"] as? String)
     }
