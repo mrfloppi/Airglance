@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirGlance</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%230ca30c'/></svg>">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f4f4f2;
+  --surface-1: #fcfcfb;
+  --border: #e4e3df;
+  --grid: #ecebe7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --series: #2a78d6;
+  --series-band: rgba(42,120,214,.14);
+  --series-fill: rgba(42,120,214,.10);
+  --ref: #b9b8b2;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --good-text: #006300; --warning-text: #8a5a00; --critical-text: #b02a2a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #111110; --surface-1: #1a1a19; --border: #2c2c2a; --grid: #262624;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series: #3987e5; --series-band: rgba(57,135,229,.20); --series-fill: rgba(57,135,229,.14);
+    --ref: #4a4a46;
+    --good-text: #3fc43f; --warning-text: #fab219; --critical-text: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #111110; --surface-1: #1a1a19; --border: #2c2c2a; --grid: #262624;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --series: #3987e5; --series-band: rgba(57,135,229,.20); --series-fill: rgba(57,135,229,.14);
+  --ref: #4a4a46;
+  --good-text: #3fc43f; --warning-text: #fab219; --critical-text: #e66767;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.head-left { flex: 1; min-width: 0; }
+.head-actions { flex: none; display: flex; gap: 8px; }
+h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { color: var(--text-secondary); font-size: 13px; display: flex; gap: 8px; align-items: center; margin-top: 4px; min-height: 18px; }
+.meta:empty, .meta.off { display: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); display: inline-block; }
+.dot.ok { background: var(--good); } .dot.err { background: var(--critical); } .dot.login { background: var(--warning); }
+.banner { background: var(--surface-1); border: 1px solid var(--warning); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: none; }
+.banner a { color: var(--series); }
+
+.top { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 760px) { .top { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+.hero { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.hero .label { color: var(--text-secondary); font-size: 13px; }
+.hero .num { font-size: 64px; font-weight: 650; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.hero .num small { font-size: 20px; color: var(--text-muted); font-weight: 500; }
+.gauge { height: 8px; border-radius: 4px; background: var(--grid); position: relative; margin-top: 8px; overflow: hidden; }
+.gauge > span { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.status svg { width: 14px; height: 14px; flex: none; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.tile .name { color: var(--text-secondary); font-size: 12.5px; }
+.tile .val { font-size: 28px; font-weight: 640; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.tile .val small { font-size: 13px; color: var(--text-muted); font-weight: 500; margin-left: 3px; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 24px 0 12px; }
+.toolbar h2 { font-size: 16px; margin: 0; font-weight: 620; }
+.seg { display: inline-flex; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.seg button { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--page); color: var(--text-primary); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+@media (max-width: 400px) { .charts { grid-template-columns: 1fr; } }
+.chart h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.chart .sub { color: var(--text-muted); font-size: 12px; margin-bottom: 6px; min-height: 17px; }
+.chart .plot { position: relative; }
+.chart .plot svg { display: block; width: 100%; height: 170px; overflow: visible; }
+.axis text { fill: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.zone { opacity: .11; }
+:root[data-theme="dark"] .zone { opacity: .13; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .zone { opacity: .13; } }
+.zone.good { fill: var(--good); } .zone.moderate { fill: var(--warning); } .zone.poor { fill: var(--critical); }
+/* 6-hour sparkline inside each tile */
+.spark { display: block; width: 100%; height: 22px; margin: 2px 0 4px; overflow: visible; }
+.spark path { fill: none; stroke: var(--series); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark path.fill { fill: var(--series-fill); stroke: none; }
+/* stale data: monitor offline or no fresh values -> grey out the traffic lights */
+body.stale .ampel i.on { background: var(--grid) !important; box-shadow: none !important; }
+body.stale .tile .val, body.stale .hero .num, body.stale .status, body.stale .spark { opacity: .45; }
+body.stale .gauge > span { background: var(--ref) !important; }
+.line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.area { fill: var(--series-fill); }
+.band { fill: var(--series-band); }
+.cross { stroke: var(--text-muted); stroke-width: 1; }
+.marker { fill: var(--series); stroke: var(--surface-1); stroke-width: 2; }
+.empty { fill: var(--text-muted); font-size: 12px; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  white-space: nowrap; display: none; z-index: 2; color: var(--text-primary);
+}
+.tip .t { color: var(--text-muted); font-size: 11px; }
+.tip b { font-variant-numeric: tabular-nums; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 28px; }
+
+/* traffic light */
+.tile, .hero { position: relative; cursor: default; outline: none; -webkit-user-select: none; user-select: none;
+  transition: border-color .15s, box-shadow .15s; }
+.tile:hover, .hero:hover { border-color: var(--ref); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+/* small "i" badge that appears on hover and signals the explanation */
+.info { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
+  border-radius: 50%; background: var(--series); color: #fff; font: 600 9.5px/1 Georgia, "Times New Roman", serif; font-style: italic;
+  opacity: 0; transform: scale(.6); transition: opacity .15s, transform .15s; }
+.tile:hover .info, .hero:hover .info { opacity: 1; transform: scale(1); }
+.hero .label { display: flex; align-items: center; gap: 6px; }
+.hero .info { position: static; }
+
+/* header: monitor switcher + settings button */
+
+.icon-btn { border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); width: 30px; height: 30px;
+  border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.icon-btn:hover { color: var(--text-primary); border-color: var(--ref); }
+.icon-btn svg { width: 16px; height: 16px; }
+.switch { display: flex; gap: 6px; flex-wrap: wrap; margin: -8px 0 14px; }
+.switch button { border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); font: inherit; font-size: 12.5px;
+  padding: 5px 11px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.switch button[aria-pressed="true"] { color: var(--text-primary); border-color: var(--ref); font-weight: 600; }
+.switch i { width: 8px; height: 8px; border-radius: 50%; background: var(--grid); }
+
+/* collapsible history */
+.collapse { width: 100%; justify-content: space-between; padding: 12px 14px; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 14px; transition: border-color .15s, background .15s; }
+.collapse:hover { border-color: var(--ref); }
+.collapse .lbl { display: inline-flex; align-items: center; gap: 8px; }
+.collapse .hint2 { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.collapse { font: inherit; font-size: 14.5px; font-weight: 620; color: var(--text-primary);
+  display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.collapse svg { width: 14px; height: 14px; transition: transform .2s; color: var(--text-muted); }
+.collapse[aria-expanded="true"] svg { transform: rotate(90deg); }
+body.compact .collapse { font-size: 14px; }
+#history { margin-top: 16px; }
+body.compact #history { margin-top: 10px; }
+.hist-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .3s ease; }
+.hist-closed .hist-body { grid-template-rows: 0fr; }
+.hist-inner { overflow: hidden; min-height: 0; }
+.hist-inner .seg-row { display: flex; justify-content: flex-end; margin: 10px 0 8px; }
+@media (prefers-reduced-motion: reduce) { .hist-body, .collapse svg { transition: none; } }
+.btn.small { font-size: 13px; padding: 5px 12px; border-radius: 8px; }
+
+/* setup / settings */
+.setup { max-width: 520px; margin: 8px auto 0; padding: 22px; }
+body.compact .setup { margin: 0; padding: 16px; }
+.setup h2 { margin: 0 0 4px; font-size: 18px; }
+.setup .lead { margin: 0 0 18px; color: var(--text-secondary); line-height: 1.5; }
+.steps { display: flex; gap: 6px; margin-bottom: 16px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.steps span { padding: 3px 9px; border-radius: 999px; background: var(--page); border: 1px solid var(--border); }
+.steps span.on { color: var(--text-primary); border-color: var(--series); font-weight: 600; }
+.steps span.done { color: var(--good-text); }
+.field { display: grid; gap: 5px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-secondary); }
+.field input, .field select, .mon input[type=text] { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--page); color: var(--text-primary); width: 100%; }
+.field input:focus, .mon input[type=text]:focus { outline: 2px solid var(--series); outline-offset: -1px; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 9px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface-1); color: var(--text-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.btn.primary { background: var(--series); border-color: var(--series); color: #fff; }
+.btn.danger { color: var(--critical-text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.hint { font-size: 12px; color: var(--text-muted); margin-top: 10px; line-height: 1.45; }
+.err { color: var(--critical-text); font-size: 13px; margin-top: 10px; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--grid); border-top-color: var(--series); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.mons { display: grid; gap: 8px; }
+.mon { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--page); }
+.mon input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--series); }
+.mon .sub { grid-column: 2; font-size: 11.5px; color: var(--text-muted); }
+.section-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 20px 0 8px; }
+.ampel { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 3px;
+  background: var(--page); border: 1px solid var(--border); border-radius: 9px; padding: 4px; }
+.ampel i { width: 9px; height: 9px; border-radius: 50%; display: block; background: var(--grid); }
+/* lamp colours follow the real device's status LED (green / yellow / red) */
+:root { --led-good: #22c55e; --led-moderate: #ffcc00; --led-poor: #ff3b30; }
+.ampel i.on.poor { background: var(--led-poor); box-shadow: 0 0 6px var(--led-poor); }
+.ampel i.on.moderate { background: var(--led-moderate); box-shadow: 0 0 6px var(--led-moderate); }
+.ampel i.on.good { background: var(--led-good); box-shadow: 0 0 6px var(--led-good); }
+.hero .ampel { top: 16px; right: 16px; }
+.tile .name { padding-right: 24px; }
+.pop { position: fixed; z-index: 10; width: 340px; max-width: calc(100vw - 24px); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  font-size: 12.5px; display: none; pointer-events: none; }
+/* speech-bubble anchor: a rotated square sharing the bubble's surface + border */
+.pop::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 7px); width: 12px; height: 12px;
+  background: var(--surface-1); border: 1px solid var(--border); transform: rotate(45deg); }
+.pop.below::before { top: -7px; border-right: 0; border-bottom: 0; border-top-left-radius: 3px; }
+.pop.above::before { bottom: -7px; border-left: 0; border-top: 0; border-bottom-right-radius: 3px; }
+.pop { animation: pop-in .12s ease-out; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(var(--dy, 3px)); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+.pop p { margin: 0 0 10px; color: var(--text-secondary); line-height: 1.45; }
+.pop ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.pop li { display: grid; grid-template-columns: 12px 64px 1fr; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 6px; }
+.pop li.cur { background: var(--page); font-weight: 600; }
+.pop li i { width: 10px; height: 10px; border-radius: 50%; }
+.pop .src { color: var(--text-muted); font-size: 11px; }
+
+/* compact layout for the menu-bar popover */
+body.compact main { padding: 14px 12px 16px; }
+body.compact header { margin-bottom: 12px; }
+body.compact h1 { font-size: 16px; }
+body.compact .meta { font-size: 11.5px; }
+body.compact .top { grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+body.compact .hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 14px; padding: 12px 14px; }
+body.compact .hero .label { width: 100%; }
+body.compact .hero .num { font-size: 44px; }
+body.compact .hero .gauge { width: 100%; margin-top: 4px; }
+body.compact .tiles { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+body.compact .tile { padding: 10px; border-radius: 12px; }
+body.compact .tile .val { font-size: 21px; }
+body.compact .tile .name { font-size: 11.5px; }
+body.compact .ampel { top: 9px; right: 9px; padding: 3px; gap: 2px; }
+body.compact .ampel i { width: 7px; height: 7px; }
+
+body.compact .charts { grid-template-columns: 1fr; gap: 8px; }
+body.compact .chart .plot svg { height: 130px; }
+body.compact footer { display: none; }
+
+/* settings (macOS System Settings style: grouped lists, icon tiles, switches) */
+.settings { max-width: 560px; margin: 0 auto; }
+.settings .section-title:first-child { margin-top: 0; }
+.group { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; min-height: 46px; border-top: 1px solid var(--border);
+  width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; font: inherit; font-size: 13.5px;
+  color: var(--text-primary); text-align: left; }
+.group > .item:first-child { border-top: 0; }
+button.item, label.item { cursor: pointer; }
+button.item:hover, label.item:hover { background: var(--page); }
+button.item:focus-visible { outline: 2px solid var(--series); outline-offset: -2px; }
+.item .txt { flex: 1; min-width: 0; }
+.item .txt small { display: block; color: var(--text-muted); font-size: 11.5px; margin-top: 1px; }
+.item.danger { color: var(--critical-text); }
+.item .chev { width: 12px; height: 12px; color: var(--text-muted); flex: none; }
+.ico { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; color: #fff; }
+.ico svg { width: 15px; height: 15px; }
+.item input[type=text] { font: inherit; font-size: 13.5px; width: 100%; border: 1px solid transparent; background: transparent;
+  color: var(--text-primary); padding: 3px 6px; margin-left: -6px; border-radius: 6px; }
+.item input[type=text]:hover { border-color: var(--border); }
+.item input[type=text]:focus { border-color: var(--series); background: var(--page); outline: none; }
+.switch-ctl { appearance: none; -webkit-appearance: none; position: relative; width: 38px; height: 22px; flex: none; margin: 0;
+  background: var(--grid); border-radius: 999px; cursor: pointer; transition: background .2s; }
+.switch-ctl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .2s; }
+.switch-ctl:checked { background: var(--series); }
+.switch-ctl:checked::after { transform: translateX(16px); }
+.switch-ctl:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.switch-ctl:disabled { opacity: .45; cursor: default; }
+.saved { color: var(--good-text); font-size: 12px; opacity: 0; transition: opacity .3s; }
+.saved.on { opacity: 1; }
+
+/* history toggle: tinted accent button, clearly different from the data cards */
+:root { --accent-bg: rgba(42,120,214,.10); --accent-bg-hover: rgba(42,120,214,.17); --accent-line: rgba(42,120,214,.28); --accent-text: #1c5cab; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {
+  --accent-bg: rgba(57,135,229,.16); --accent-bg-hover: rgba(57,135,229,.25); --accent-line: rgba(57,135,229,.38); --accent-text: #86b6ef; } }
+:root[data-theme="dark"] { --accent-bg: rgba(57,135,229,.16); --accent-bg-hover: rgba(57,135,229,.25); --accent-line: rgba(57,135,229,.38); --accent-text: #86b6ef; }
+.collapse { justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-bg);
+  border: 1px solid var(--accent-line); color: var(--accent-text); font-size: 13.5px; font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05); transition: background .15s, box-shadow .15s; }
+.collapse:hover { background: var(--accent-bg-hover); border-color: var(--accent-line); }
+.collapse:active { transform: translateY(.5px); }
+.collapse:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.collapse svg { color: currentColor; width: 14px; height: 14px; transition: transform .25s; transform: none; }
+.collapse[aria-expanded="true"] svg { transform: rotate(180deg); }
+body.compact .collapse { font-size: 13px; }
+
+/* icons: device next to the title, one per measurement */
+h1 { display: flex; align-items: center; gap: 9px; }
+h1 #title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-ico { width: 26px; height: 26px; flex: none; color: var(--text-secondary); }
+body.compact .dev-ico { width: 22px; height: 22px; }
+h1.no-dev .dev-ico { display: none; }
+.m-ico { width: 15px; height: 15px; flex: none; color: var(--text-secondary); }
+.tile .name, .hero .label, .chart h3 { display: flex; align-items: center; gap: 5px; }
+.chart h3 .m-ico { width: 15px; height: 15px; }
+
+/* calm air flow behind the score: slow drifting waves + a few floating particles.
+   Colour = LED colour of the current score, particle count follows PM2.5. */
+.hero { --flow: var(--ref); overflow: hidden; }
+.hero > :not(.flow):not(.ampel) { position: relative; z-index: 1; }
+.hero > .ampel { z-index: 2; }
+.flow { position: absolute; inset: 0; pointer-events: none; z-index: 0; transition: color 1.2s ease; color: var(--flow); }
+.flow svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.flow .w { fill: none; stroke: currentColor; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.flow .w1 { opacity: .3; animation: drift 26s linear infinite; }
+.flow .w2 { opacity: .2; animation: drift 38s linear infinite; }
+.flow .w3 { opacity: .13; animation: drift 54s linear infinite; }
+.flow .fill { fill: currentColor; opacity: .08; animation: drift 38s linear infinite; }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-800px); } }
+.mote { position: absolute; left: 0; width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: 0;
+  animation: float linear infinite; }
+@keyframes float {
+  0%   { transform: translate(-10px, 0); opacity: 0; }
+  10%  { opacity: .45; }
+  50%  { transform: translate(calc(var(--w, 400px) * .5), var(--dy, -10px)); }
+  90%  { opacity: .45; }
+  100% { transform: translate(calc(var(--w, 400px) + 10px), 0); opacity: 0; }
+}
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .flow .w1 { opacity: .3; } :root:where(:not([data-theme="light"])) .flow .fill { opacity: .09; } }
+body.stale .hero { --flow: var(--ref); }
+body.paused .flow *, body.stale .flow * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .flow .w, .flow .fill { animation: none; } .mote { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="head-left">
+      <h1 id="titleRow"><svg class="dev-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14a2.5 2.5 0 0 1 2.5 2.5v8a4 4 0 0 1-4 4h-11a4 4 0 0 1-4-4V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M2.6 16.3h18.8" opacity=".45"/><rect x="6.8" y="10" width="10.4" height="3.8" rx="1.9"/><circle cx="9.3" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="11" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="12.7" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="14.4" cy="11.9" r=".55" fill="currentColor" stroke="none"/><path d="M12 7.3v1" stroke-linecap="round"/></svg><span id="title">AirGlance</span></h1>
+      <div class="meta" id="metaRow"><span class="dot" id="dot"></span><span id="meta">Lade …</span></div>
+    </div>
+    <div class="head-actions">
+      <button class="btn small" id="done" hidden>Fertig</button>
+      <button class="icon-btn" id="gear" title="Monitore & Konto" aria-label="Monitore und Konto verwalten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="card setup" id="setup" hidden></section>
+
+  <div id="dash">
+  <div class="switch" id="switch" hidden></div>
+  <div class="banner" id="banner"></div>
+
+  <section class="top">
+    <div class="card hero" data-key="iaq">
+      <div class="flow" id="flow" aria-hidden="true"></div>
+      <div class="ampel" id="iaqAmpel"></div>
+      <div class="label"><span id="iaqIcon"></span>Luftqualitäts-Score<span class="info">i</span></div>
+      <div class="num" id="iaq">–<small> / 100</small></div>
+      <div id="iaqStatus"></div>
+      <div class="gauge"><span id="iaqBar"></span></div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <div id="history" class="hist-closed">
+    <button class="collapse" id="histToggle" aria-expanded="false" aria-controls="histBody">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>
+      <span id="histHint">Verlauf anzeigen</span></button>
+    <div class="hist-body" id="histBody"><div class="hist-inner">
+      <div class="seg-row"><div class="seg" role="group" aria-label="Zeitraum">
+        <button data-range="24h" aria-pressed="true">24 Std.</button>
+        <button data-range="7d" aria-pressed="false">7 Tage</button>
+        <button data-range="30d" aria-pressed="false">30 Tage</button>
+      </div></div>
+      <section class="charts" id="charts"></section>
+    </div></div>
+  </div>
+  </div>
+
+  <div class="pop" id="pop" role="tooltip"></div>
+  <footer>Daten: Amazon Smart Air Quality Monitor über die Alexa-Cloud. Der Verlauf wird lokal gespeichert.</footer>
+</main>
+
+<script>
+if (new URLSearchParams(location.search).has("compact")) document.body.classList.add("compact");
+const METRICS = [
+  { key: "iaq",         name: "Luftqualitäts-Score", unit: "",       dec: 0, min: 0, max: 100, refs: [[65, "Gut ab 65"], [35, "Mäßig ab 35"]],
+    status: v => v >= 65 ? "good" : v >= 35 ? "moderate" : "poor",
+    info: "Gesamtbewertung des Monitors aus Feinstaub, VOC, Kohlenmonoxid und Luftfeuchte. Je höher, desto besser.",
+    bands: { good: "65 – 100", moderate: "35 – 64", poor: "0 – 34" },
+    source: "Grenzen vom Gerät selbst (Amazon)" },
+  { key: "pm25",        name: "Feinstaub PM2.5",     unit: "µg/m³",  dec: 0, min: 0, refs: [[12, "Gut bis 12"], [35, "Mäßig bis 35"]],
+    status: v => v <= 12 ? "good" : v <= 35 ? "moderate" : "poor",
+    info: "Sehr feine Partikel unter 2,5 µm, z. B. aus Kochen, Kerzen, Rauch oder Verkehr. Sie gelangen tief in die Lunge.",
+    bands: { good: "0 – 12 µg/m³", moderate: "13 – 35 µg/m³", poor: "über 35 µg/m³" },
+    source: "Richtwerte nach US-EPA (die WHO empfiehlt im Jahresmittel sogar ≤ 5 µg/m³)" },
+  { key: "pm10",        name: "Feinstaub PM10",      unit: "µg/m³",  dec: 0, min: 0, refs: [[54, "Gut bis 54"]],
+    status: v => v <= 54 ? "good" : v <= 154 ? "moderate" : "poor",
+    info: "Gröbere Partikel unter 10 µm, z. B. Hausstaub und Pollen. Amazon liefert hierfür keine Historie, nur Live-Werte.",
+    bands: { good: "0 – 54 µg/m³", moderate: "55 – 154 µg/m³", poor: "über 154 µg/m³" },
+    source: "Richtwerte nach US-EPA" },
+  { key: "voc",         name: "VOC",                 unit: "Index",  dec: 0, min: 0, refs: [[30, "Gut bis 30"]],
+    status: v => v <= 30 ? "good" : v <= 60 ? "moderate" : "poor",
+    info: "Flüchtige organische Verbindungen, z. B. aus Reinigungsmitteln, Farben, Möbeln, Parfum oder beim Kochen. Amazon-eigener Index von 0 bis 100, niedriger ist besser.",
+    bands: { good: "0 – 30", moderate: "31 – 60", poor: "über 60" },
+    source: "Geschätzte Grenzen: Amazon veröffentlicht keine Schwellen für den VOC-Index" },
+  { key: "co",          name: "Kohlenmonoxid",       unit: "ppm",    dec: 0, min: 0, refs: [[9, "Grenzwert 9"]],
+    status: v => v <= 9 ? "good" : v <= 35 ? "moderate" : "poor",
+    info: "Geruchloses Gas aus unvollständiger Verbrennung (Gastherme, Kamin, Abgase). Der Monitor ersetzt keinen zertifizierten CO-Melder.",
+    bands: { good: "0 – 9 ppm", moderate: "10 – 35 ppm", poor: "über 35 ppm" },
+    source: "Richtwerte nach WHO / US-EPA (8-Stunden-Mittel 9 ppm)" },
+  { key: "temperature", name: "Temperatur",          unit: "°C",     dec: 1, refs: [[24, "Behaglich 19–24 °C"], [19, ""]],
+    status: v => v >= 19 && v <= 24 ? "good" : v >= 17 && v <= 26 ? "moderate" : "poor",
+    info: "Raumtemperatur. Für Wohn- und Arbeitsräume gelten etwa 19 bis 24 °C als behaglich, im Schlafzimmer eher 16 bis 19 °C.",
+    bands: { good: "19 – 24 °C", moderate: "17 – 18,9 °C oder 24,1 – 26 °C", poor: "unter 17 °C oder über 26 °C" },
+    source: "Übliche Behaglichkeitswerte für Wohnräume" },
+  { key: "humidity",    name: "Luftfeuchtigkeit",    unit: "%",      dec: 0, refs: [[60, "Ideal 40–60 %"], [40, ""]],
+    status: v => v >= 40 && v <= 60 ? "good" : v >= 30 && v <= 70 ? "moderate" : "poor",
+    info: "Relative Luftfeuchte. Zu trockene Luft reizt Augen und Schleimhäute, zu feuchte Luft fördert Schimmel und Milben.",
+    bands: { good: "40 – 60 %", moderate: "30 – 39 % oder 61 – 70 %", poor: "unter 30 % oder über 70 %" },
+    source: "Übliche Empfehlung für Innenräume" },
+];
+// one small line icon per measurement (24x24, stroke = currentColor)
+const M_ICONS = {
+  iaq: '<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l3.5-4.5"/><circle cx="12" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
+  pm25: [[6,7],[12,5],[17.5,8.5],[8.5,12.5],[14.5,13],[19,16.5],[6.5,18],[12,19.5]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.3" fill="currentColor" stroke="none"/>`).join(""),
+  pm10: [[7,7.5],[16.5,6.5],[11.5,14],[18,17],[5.5,18]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.4" fill="currentColor" stroke="none"/>`).join(""),
+  voc: '<circle cx="6" cy="17" r="2.6"/><circle cx="18" cy="17" r="2.6"/><circle cx="12" cy="6.5" r="2.6"/><path d="M7.4 14.8l3.3-6M16.6 14.8l-3.3-6M8.7 17h6.6"/>',
+  co: '<path d="M12 3c.6 2.8 5.5 5.2 5.5 10.2a5.5 5.5 0 0 1-11 0c0-2.6 1.4-4.3 2.6-5.3.2 1.6 1 2.7 2.1 3.2-.3-3.2.1-5.7.8-8.1z"/>',
+  temperature: '<path d="M14 14.6V5a2 2 0 0 0-4 0v9.6a4 4 0 1 0 4 0z"/><path d="M12 9.5v7.5"/>',
+  humidity: '<path d="M12 3.2s6 6.4 6 10.9a6 6 0 0 1-12 0c0-4.5 6-10.9 6-10.9z"/><path d="M9 14.5a3 3 0 0 0 3 3"/>',
+};
+const micon = k => `<svg class="m-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${M_ICONS[k] || ""}</svg>`;
+const STATUS = {
+  good:     { label: "Gut",      color: "var(--led-good)",     text: "var(--good-text)",
+              icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--led-good)"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+  moderate: { label: "Mäßig",    color: "var(--led-moderate)",  text: "var(--warning-text)",
+              icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l7 12.5H1z" fill="var(--led-moderate)"/><path d="M8 6v4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12" r=".9" fill="#000"/></svg>' },
+  poor:     { label: "Schlecht", color: "var(--led-poor)", text: "var(--critical-text)",
+              icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--led-poor)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>' },
+};
+const fmt = (v, d) => v == null ? "–" : v.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+const statusHTML = s => s ? `<span class="status" style="color:${STATUS[s].text}">${STATUS[s].icon}${STATUS[s].label}</span>` : "";
+
+let range = "24h", history = null;
+
+// ------------------------------------------------------------ status + tiles
+async function loadStatus() {
+  const st = STATUS_DATA, latest = await api("/api/latest");
+  const mon = MONITORS.find(m => m.id === DEVICE);
+  document.getElementById("title").textContent = mon ? mon.display : "AirGlance";
+  document.getElementById("titleRow").classList.remove("no-dev");
+  st.stale = mon ? mon.stale : false;
+  const dot = document.getElementById("dot"), banner = document.getElementById("banner");
+  dot.className = "dot " + ({ ok: "ok", error: "err", login_required: "login" }[st.status] || "");
+  const tsAll = Object.values(latest).map(x => x.ts);
+  const newest = tsAll.length ? Math.max(...tsAll) : null;
+  document.getElementById("meta").textContent = newest
+    ? "Messung von " + new Date(newest * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) + " · Abruf alle " + Math.round(st.interval / 60) + " Min."
+    : "Noch keine Messwerte";
+  document.body.classList.toggle("stale", !!st.stale && !!newest);
+  if (st.stale && newest && st.status === "ok") dot.className = "dot";   // grey dot: data not current
+  if (false) {
+  } else if (st.stale && newest) {
+    banner.style.display = "block";
+    banner.textContent = "Keine neuen Messwerte seit " + new Date(newest * 1000).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" })
+      + " – ist der Monitor eingeschaltet und im WLAN?";
+  } else if (st.status === "error") {
+    banner.style.display = "block"; banner.textContent = "Abruf fehlgeschlagen: " + st.message;
+  } else banner.style.display = "none";
+  try { SPARK = (await api("/api/history?range=6h")).series || {}; } catch { SPARK = {}; }
+
+  const iaq = latest.iaq?.value;
+  document.getElementById("iaq").innerHTML = `${fmt(iaq, 0)}<small> / 100</small>`;
+  const s = latest.iaq?.status || (iaq != null ? METRICS[0].status(iaq) : null);
+  document.getElementById("iaqStatus").innerHTML = statusHTML(s);
+  const bar = document.getElementById("iaqBar");
+  bar.style.width = (iaq ?? 0) + "%"; bar.style.background = s ? STATUS[s].color : "transparent";
+  document.querySelector(".hero").style.setProperty("--flow", s ? `var(--led-${s})` : "var(--ref)");
+  setMotes(latest.pm25?.value);
+
+  document.getElementById("iaqAmpel").innerHTML = ampelHTML(s);
+
+  document.getElementById("tiles").innerHTML = METRICS.slice(1).map(m => {
+    const v = latest[m.key]?.value;
+    const st = latest[m.key]?.status || (v != null && m.status ? m.status(v) : null);
+    return `<div class="tile" data-key="${m.key}" aria-describedby="pop"><div class="ampel">${ampelHTML(st)}</div>
+      <div class="name">${micon(m.key)}${m.name}<span class="info">i</span></div>
+      <div class="val">${fmt(v, m.dec)}<small>${m.unit}</small></div>${sparkHTML(SPARK[m.key])}${statusHTML(st) || '<span class="status">&nbsp;</span>'}</div>`;
+  }).join("");
+  LATEST = latest;
+}
+
+// ------------------------------------------------------------ air flow behind the score
+(function buildFlow() {
+  // seamless waves: each path covers two widths of the 800-unit view box and drifts by one width
+  const wave = (y, amp, len, phase) => {
+    let d = "";
+    for (let x = 0; x <= 1600; x += 16) d += (x ? "L" : "M") + x + "," + (y + amp * Math.sin((x / len) * 2 * Math.PI + phase)).toFixed(1);
+    return d;
+  };
+  const low = wave(118, 7, 400, 2.1);
+  document.getElementById("flow").innerHTML = `<svg viewBox="0 0 800 160" preserveAspectRatio="none">
+    <path class="fill" d="${low}L1600,160L0,160Z"/>
+    <path class="w w3" d="${wave(46, 9, 800, 0.4)}"/>
+    <path class="w w2" d="${wave(84, 8, 400, 1.3)}"/>
+    <path class="w w1" d="${low}"/>
+  </svg>`;
+})();
+let moteCount = -1;
+function setMotes(pm25) {
+  // more fine dust -> a few more particles in the air (4 … 16)
+  const n = pm25 == null ? 4 : Math.round(Math.min(16, 4 + pm25 * 0.6));
+  if (n === moteCount) return;
+  moteCount = n;
+  const flow = document.getElementById("flow"), w = flow.clientWidth || 400;
+  flow.querySelectorAll(".mote").forEach(m => m.remove());
+  for (let i = 0; i < n; i++) {
+    const m = document.createElement("span");
+    m.className = "mote";
+    const dur = 14 + Math.random() * 16;
+    m.style.cssText = `top:${(15 + Math.random() * 75).toFixed(1)}%;--w:${w}px;--dy:${(Math.random() * 24 - 12).toFixed(1)}px;` +
+      `animation-duration:${dur.toFixed(1)}s;animation-delay:${(-Math.random() * dur).toFixed(1)}s;` +
+      `width:${(2 + Math.random() * 2).toFixed(1)}px;height:auto;aspect-ratio:1`;
+    flow.appendChild(m);
+  }
+}
+document.addEventListener("visibilitychange", () => document.body.classList.toggle("paused", document.hidden));
+addEventListener("resize", () => { moteCount = -1; setMotes(LATEST.pm25?.value); });   // particles travel the full new width
+
+// ------------------------------------------------------------ sparkline (last 6 h)
+let SPARK = {};
+function sparkHTML(pts) {
+  if (!pts || pts.length < 2) return '<svg class="spark" aria-hidden="true"></svg>';
+  const t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
+  const vs = pts.map(p => p[1]); let lo = Math.min(...vs), hi = Math.max(...vs);
+  if (hi - lo < 1) { lo -= 0.5; hi += 0.5; }   // flat line stays in the middle instead of jumping
+  const X = t => ((t - t0) / (t1 - t0 || 1) * 100).toFixed(2), Y = v => (22 - (v - lo) / (hi - lo) * 20 - 1).toFixed(2);
+  const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]) + "," + Y(p[1])).join("");
+  return `<svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">
+    <path class="fill" d="${d}L100,22L0,22Z"/><path d="${d}"/></svg>`;
+}
+
+// ------------------------------------------------------------ traffic light + explanation
+let LATEST = {};
+const ampelHTML = s => ["poor", "moderate", "good"].map(k => `<i class="${k}${s === k ? " on" : ""}"></i>`).join("");
+const pop = document.getElementById("pop");
+function showPop(el) {
+  const m = METRICS.find(x => x.key === el.dataset.key); if (!m) return;
+  const v = LATEST[m.key]?.value, s = v != null ? m.status(v) : null;
+  const li = k => `<li class="${s === k ? "cur" : ""}"><i style="background:${STATUS[k].color}"></i><span>${STATUS[k].label}</span><span>${m.bands[k]}</span></li>`;
+  // inside the Mac app: native macOS popover, which may extend beyond the dashboard window
+  if (window.webkit?.messageHandlers?.app) {
+    if (NATIVE_TIP === el) return;   // already showing for this tile (mouseover fires for every child)
+    NATIVE_TIP = el;
+    const r = el.getBoundingClientRect(), led = { good: "#22c55e", moderate: "#ffcc00", poor: "#ff3b30" };
+    window.webkit.messageHandlers.app.postMessage({ action: "tooltip", value: {
+      x: r.left, y: r.top, w: r.width, h: r.height, info: m.info, source: m.source,
+      rows: ["good", "moderate", "poor"].map(k => ({ color: led[k], label: STATUS[k].label, range: m.bands[k], current: s === k })) } });
+    return;
+  }
+  // name, value and status are already on the tile -> tooltip only explains
+  pop.innerHTML = `<p>${m.info}</p><ul>${li("good")}${li("moderate")}${li("poor")}</ul><div class="src">${m.source}</div>`;
+  pop.style.display = "block";
+  const r = el.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = Math.min(Math.max(r.left + r.width / 2 - pw / 2, 12), innerWidth - pw - 12);
+  // bubble sits 7px (= anchor height) from the box, so the anchor tip touches the box edge
+  const below = r.bottom + 7 + ph <= innerHeight - 4 || r.top - 7 - ph < 4;
+  const top = below ? r.bottom + 7 : r.top - 7 - ph;
+  pop.classList.toggle("below", below); pop.classList.toggle("above", !below);
+  pop.style.setProperty("--dy", below ? "-3px" : "3px");
+  const ax = Math.min(Math.max(r.left + r.width / 2 - left, 18), pw - 18);
+  pop.style.setProperty("--ax", ax + "px");
+  pop.style.left = left + "px"; pop.style.top = top + "px";
+}
+let NATIVE_TIP = null;
+const hidePop = () => {
+  NATIVE_TIP = null;
+  pop.style.display = "none";
+  window.webkit?.messageHandlers?.app?.postMessage({ action: "tooltipHide", value: null });
+};
+document.addEventListener("mouseover", e => { const el = e.target.closest(".tile, .hero"); if (el) showPop(el); });
+document.addEventListener("mouseout", e => { const el = e.target.closest(".tile, .hero"); if (el && !el.contains(e.relatedTarget)) hidePop(); });
+addEventListener("scroll", hidePop, { passive: true });
+
+// ------------------------------------------------------------ charts
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(s => s >= step0);
+  const ticks = []; for (let t = Math.floor(lo / step) * step; t <= hi + step - 1e-9; t += step) ticks.push(+t.toFixed(6));
+  return ticks;
+}
+function timeTicks(t0, t1) {
+  const span = t1 - t0, out = [];
+  const step = span <= 86400 * 1.01 ? 6 * 3600 : span <= 7 * 86400 * 1.01 ? 86400 : 7 * 86400;
+  const d = new Date(t0 * 1000); d.setMinutes(0, 0, 0);
+  if (step >= 86400) d.setHours(0); else d.setHours(Math.ceil(d.getHours() / 6) * 6);
+  for (let t = d.getTime() / 1000; t <= t1; t += step) if (t >= t0) out.push(t);
+  return out;
+}
+function tickLabel(t, span) {
+  const d = new Date(t * 1000);
+  return span <= 86400 * 1.01 ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
+                              : d.toLocaleDateString("de-DE", { day: "numeric", month: "numeric" });
+}
+
+function drawChart(el, m, pts, t0, t1) {
+  const plot = el.querySelector(".plot"), svg = plot.querySelector("svg"), tip = plot.querySelector(".tip");
+  // size the drawing to the real on-screen box (popover/compact mode uses a smaller height)
+  if (!plot.clientWidth) return;   // hidden (e.g. popover closed) -> ResizeObserver redraws later
+  const W = plot.clientWidth, H = svg.clientHeight || 170, L = 34, R = 8, T = 10, B = 22;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (!pts || !pts.length) {
+    svg.innerHTML = `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">Noch keine Daten in diesem Zeitraum</text>`;
+    el.querySelector(".sub").textContent = ""; return;
+  }
+  const vals = pts.flatMap(p => [p[2], p[3]]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  // include reference lines only when they are reasonably close to the data
+  (m.refs || []).forEach(([r]) => { if (r <= hi * 2 + 2 && r >= lo / 2 - 2) { lo = Math.min(lo, r); hi = Math.max(hi, r); } });
+  if (m.min != null) lo = Math.max(m.min, Math.min(lo, m.min));
+  const pad = (hi - lo) * 0.1 || 1; if (m.min == null) lo -= pad; hi += pad;
+  if (m.max != null) hi = Math.min(hi, m.max);
+  const yt = niceTicks(lo, hi); lo = yt[0]; hi = yt[yt.length - 1];
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R), y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const gap = (range === "24h" ? 1800 : range === "7d" ? 5400 : 21600);
+
+  const segs = []; let cur = [];
+  pts.forEach((p, i) => { if (i && p[0] - pts[i - 1][0] > gap) { segs.push(cur); cur = []; } cur.push(p); });
+  segs.push(cur);
+  const P = (t, v) => x(t).toFixed(1) + "," + y(v).toFixed(1);
+  const path = s => s.map((p, i) => (i ? "L" : "M") + P(p[0], p[1])).join("");
+  const band = s => s.map((p, i) => (i ? "L" : "M") + P(p[0], p[3])).join("") + s.slice().reverse().map(p => "L" + P(p[0], p[2])).join("") + "Z";
+  const area = s => path(s) + "L" + P(s[s.length - 1][0], lo) + "L" + P(s[0][0], lo) + "Z";
+  const showBand = range !== "24h";
+
+  let h = '<g class="axis">';
+  const dec = (yt[1] - yt[0]) < 1 ? 1 : 0;
+  yt.forEach(v => h += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end">${fmt(v, dec)}</text>`);
+  timeTicks(t0, t1).forEach(t => h += `<text x="${x(t)}" y="${H - 5}" text-anchor="middle">${tickLabel(t, t1 - t0)}</text>`);
+  h += "</g>";
+  // faint green/yellow/red background zones, derived from the metric's own traffic-light rule
+  if (m.status) {
+    const steps = 160, dv = (hi - lo) / steps; let start = lo, cur = m.status(lo + dv / 2);
+    for (let i = 1; i <= steps; i++) {
+      const v = lo + i * dv, st = i < steps ? m.status(v + dv / 2) : null;
+      if (st !== cur) {
+        h += `<rect class="zone ${cur}" x="${L}" width="${W - L - R}" y="${y(v).toFixed(1)}" height="${(y(start) - y(v)).toFixed(1)}"/>`;
+        start = v; cur = st;
+      }
+    }
+  }
+  segs.forEach(s => {
+    // min–max band for aggregated ranges; plain line on 24 h (the status zones are the background)
+    if (showBand) h += `<path class="band" d="${band(s)}"/>`; else if (!m.status) h += `<path class="area" d="${area(s)}"/>`;
+    h += s.length > 1 ? `<path class="line" d="${path(s)}"/>` : `<circle class="marker" r="4" cx="${x(s[0][0])}" cy="${y(s[0][1])}"/>`;
+  });
+  h += `<g class="hover" style="display:none"><line class="cross" y1="${T}" y2="${H - B}"/><circle class="marker" r="4.5"/></g>`;
+  h += `<rect x="${L}" y="0" width="${W - L}" height="${H}" fill="transparent" class="hit"/>`;
+  svg.innerHTML = h;
+
+  const avg = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  el.querySelector(".sub").textContent = `Ø ${fmt(avg, m.dec)} · Min ${fmt(Math.min(...pts.map(p => p[2])), m.dec)} · Max ${fmt(Math.max(...pts.map(p => p[3])), m.dec)} ${m.unit}`;
+
+  const hover = svg.querySelector(".hover"), cross = hover.querySelector("line"), mk = hover.querySelector("circle");
+  const hit = svg.querySelector(".hit");
+  hit.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect(), mx = Math.min((ev.clientX - r.left) * W / r.width, W - R);
+    const t = t0 + (mx - L) / (W - L - R) * (t1 - t0);
+    let best = pts[0]; for (const p of pts) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+    const px = x(best[0]), py = y(best[1]);
+    hover.style.display = ""; cross.setAttribute("x1", px); cross.setAttribute("x2", px); mk.setAttribute("cx", px); mk.setAttribute("cy", py);
+    const when = new Date(best[0] * 1000).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    const extra = showBand && best[2] !== best[3] ? `<div class="t">Spanne ${fmt(best[2], m.dec)} – ${fmt(best[3], m.dec)}</div>` : "";
+    tip.innerHTML = `<div class="t">${when}${showBand ? " · Ø" : ""}</div><b>${fmt(best[1], m.dec)}</b> ${m.unit}${extra}`;
+    tip.style.display = "block";
+    const sx = px * r.width / W, tw = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(sx - tw / 2, 0), r.width - tw) + "px";
+    tip.style.top = Math.max(py * r.height / H - tip.offsetHeight - 12, -8) + "px";
+  });
+  hit.addEventListener("pointerleave", () => { hover.style.display = "none"; tip.style.display = "none"; });
+}
+
+function renderCharts() {
+  const box = document.getElementById("charts");
+  if (!box.children.length) box.innerHTML = METRICS.map(m => `<div class="card chart" data-key="${m.key}">
+      <h3>${micon(m.key)}${m.name}${m.unit ? ` <span style="color:var(--text-muted);font-weight:500">(${m.unit})</span>` : ""}</h3>
+      <div class="sub"></div><div class="plot"><svg role="img" aria-label="Verlauf ${m.name}"></svg><div class="tip"></div></div></div>`).join("");
+  if (!history) return;
+  METRICS.forEach(m => drawChart(box.querySelector(`[data-key="${m.key}"]`), m, history.series[m.key], history.since, history.now));
+}
+
+async function loadHistory(force = false) {
+  if (document.getElementById("history").classList.contains("hist-closed") && !force) return;
+  history = await api("/api/history?range=" + range);
+  renderCharts();
+}
+
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  range = b.dataset.range;
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  loadHistory();
+}));
+// redraw whenever the chart area changes size (window resize, popover opening, compact layout)
+let rz, lastW = 0;
+new ResizeObserver(entries => {
+  const w = Math.round(entries[0].contentRect.width);
+  if (w && w !== lastW) { lastW = w; clearTimeout(rz); rz = setTimeout(renderCharts, 60); }
+}).observe(document.getElementById("charts"));
+
+// ------------------------------------------------------------ app state + API helpers
+let STATUS_DATA = {}, MONITORS = [], DEVICE = null;
+let SETTINGS_OPEN = false, EDIT_ACCOUNT = false, RENDERED = null, RENDER_KEY = "", SCANNING = false, SCANNED = false, fastTimer;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function api(path) {
+  const url = new URL(path, location.origin);
+  if (DEVICE && !["/api/status", "/api/monitors"].includes(url.pathname)) url.searchParams.set("device", DEVICE);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-AQM": "1" }, body: JSON.stringify(body || {}) });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json();
+}
+
+// ------------------------------------------------------------ collapsible history (remembered)
+const histBox = document.getElementById("history"), histToggle = document.getElementById("histToggle");
+async function setHistory(open) {
+  if (open) { try { await loadHistory(true); } catch { /* show anyway */ } }   // fill first, then animate open
+  histBox.classList.toggle("hist-closed", !open);
+  histToggle.setAttribute("aria-expanded", String(open));
+  document.getElementById("histHint").textContent = open ? "Verlauf ausblenden" : "Verlauf anzeigen";
+  store.set("historyOpen", open ? "1" : "0");
+}
+histToggle.addEventListener("click", () => setHistory(histBox.classList.contains("hist-closed")));
+if (store.get("historyOpen") === "1") {
+  histBox.classList.remove("hist-closed"); histToggle.setAttribute("aria-expanded", "true");
+  document.getElementById("histHint").textContent = "Verlauf ausblenden";
+}
+
+// ------------------------------------------------------------ monitor switcher + settings button
+function renderSwitch() {
+  const enabled = MONITORS.filter(m => m.enabled && !m.missing), sw = document.getElementById("switch");
+  sw.hidden = enabled.length < 2;
+  sw.innerHTML = enabled.map(m => `<button data-id="${esc(m.id)}" aria-pressed="${m.id === DEVICE}">${esc(m.display)}</button>`).join("");
+}
+document.getElementById("switch").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  DEVICE = b.dataset.id; store.set("device", DEVICE); history = null; refresh();
+});
+document.getElementById("gear").addEventListener("click", () => { SETTINGS_OPEN = !SETTINGS_OPEN; RENDERED = null; refresh(); });
+function openSettings() { SETTINGS_OPEN = true; RENDERED = null; refresh(); }   // called by the menu-bar app
+
+// ------------------------------------------------------------ bridge to the Mac app (only inside the app)
+const NATIVE = window.webkit?.messageHandlers?.app;
+let APP_STATE = { notifications: true, autostart: false };
+const native = (action, value) => NATIVE?.postMessage({ action, value: value ?? null });
+window.onAppState = st => {
+  APP_STATE = st;
+  document.querySelectorAll("input[data-app]").forEach(i => { i.checked = !!st[i.dataset.app]; });
+};
+if (NATIVE) {
+  native("getState");
+  // tell the menu-bar window how tall the content is, so it is never taller than needed
+  const mainEl = document.querySelector("main");
+  let lastH = 0;
+  new ResizeObserver(() => {
+    const h = Math.ceil(mainEl.getBoundingClientRect().height);
+    if (h !== lastH) { lastH = h; native("height", h); }
+  }).observe(mainEl);
+}
+
+// ------------------------------------------------------------ settings view
+const ICONS = {
+  device: '<path d="M5 5.5h14a2.5 2.5 0 0 1 2.5 2.5v8a4 4 0 0 1-4 4h-11a4 4 0 0 1-4-4V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M2.6 16.3h18.8" opacity=".45"/><rect x="6.8" y="10" width="10.4" height="3.8" rx="1.9"/><circle cx="9.3" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="11" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="12.7" cy="11.9" r=".55" fill="currentColor" stroke="none"/><circle cx="14.4" cy="11.9" r=".55" fill="currentColor" stroke="none"/><path d="M12 7.3v1" stroke-linecap="round"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  power: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><path d="M12 2v10"/>',
+  window: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+  reload: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/>',
+  folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  quit: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',
+};
+const ico = (name, color) => `<span class="ico" style="background:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg></span>`;
+const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>';
+
+function renderSettings(el) {
+  const acc = STATUS_DATA.account;
+  const monRows = MONITORS.map(m => `<div class="item">${ico("device", m.missing ? "#8e8e93" : "#30b0c7")}
+      <span class="txt"><input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="Name für ${esc(m.name)}">
+        <small>${m.missing ? "Nicht mehr im Amazon-Konto gefunden" : "In Alexa: " + esc(m.name) + (m.newest_ts ? " · zuletzt " + when(m.newest_ts) : "")}</small></span>
+      <input type="checkbox" class="switch-ctl" data-mon="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${esc(m.display)} anzeigen">
+    </div>`).join("");
+  el.innerHTML = `
+    <div class="section-title">Monitore <span class="saved" id="saved">✓ Gespeichert</span></div>
+    <div class="group">${monRows}
+      <button class="item" id="scan" ${SCANNING ? "disabled" : ""}>${ico("search", "#5856d6")}<span class="txt">${SCANNING ? "Suche läuft …" : "Erneut suchen"}<small>Neue Monitore im Amazon-Konto finden</small></span>${SCANNING ? '<span class="spin"></span>' : CHEV}</button>
+    </div>
+    <div class="hint">Mit dem Schalter blendest du einen Monitor ein oder aus. Eigene Namen gelten nur in dieser App.</div>
+    <div class="err" id="err"></div>
+    ${NATIVE ? `
+    <div class="section-title">Mitteilungen</div>
+    <div class="group">
+      <label class="item">${ico("bell", "#ff3b30")}<span class="txt">Bei Ampelwechsel benachrichtigen<small>z. B. „Zu warm“ oder „Luft zu feucht“</small></span>
+        <input type="checkbox" class="switch-ctl" data-app="notifications" ${APP_STATE.notifications ? "checked" : ""}></label>
+      <button class="item" data-act="test">${ico("send", "#ff9500")}<span class="txt">Test-Mitteilung senden</span>${CHEV}</button>
+    </div>
+    <div class="section-title">Allgemein</div>
+    <div class="group">
+      <label class="item">${ico("power", "#34c759")}<span class="txt">Mit dem System starten<small>Startet automatisch nach der Anmeldung am Mac</small></span>
+        <input type="checkbox" class="switch-ctl" data-app="autostart" ${APP_STATE.autostart ? "checked" : ""}></label>
+      <button class="item" data-act="openWindow">${ico("window", "#007aff")}<span class="txt">Dashboard im Fenster öffnen</span>${CHEV}</button>
+      <button class="item" data-act="reload">${ico("reload", "#8e8e93")}<span class="txt">Neu laden</span>${CHEV}</button>
+    </div>
+    <div class="section-title">Hilfe & Fehlersuche</div>
+    <div class="group">
+      <button class="item" data-act="showLog">${ico("doc", "#8e8e93")}<span class="txt">Log anzeigen</span>${CHEV}</button>
+      <button class="item" data-act="showData">${ico("folder", "#5ac8fa")}<span class="txt">Datenordner öffnen</span>${CHEV}</button>
+    </div>` : ""}
+    ${acc ? `<div class="section-title">Amazon-Konto</div>
+    <div class="group">
+      <div class="item">${ico("user", "#8e8e93")}<span class="txt">${esc(acc.email)}<small>${esc(acc.domain)}</small></span></div>
+      <button class="item danger" id="logout">${ico("logout", "#ff3b30")}<span class="txt">Abmelden<small style="color:var(--text-muted)">Gespeicherte Werte und Namen bleiben erhalten</small></span></button>
+    </div>` : ""}
+    ${NATIVE ? `<div class="group" style="margin-top:20px">
+      <button class="item" data-act="quit">${ico("quit", "#8e8e93")}<span class="txt">AirGlance beenden</span></button></div>` : ""}`;
+
+  let saveTimer;
+  const save = async () => {
+    const monitors = MONITORS.map(m => ({ id: m.id,
+      enabled: el.querySelector(`input[data-mon="${CSS.escape(m.id)}"]`).checked,
+      alias: el.querySelector(`input[data-alias="${CSS.escape(m.id)}"]`).value.trim() }));
+    if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = "Mindestens ein Monitor muss eingeschaltet bleiben."; return false; }
+    el.querySelector("#err").textContent = "";
+    try {
+      MONITORS = await post("/api/monitors", { monitors });
+      const s = el.querySelector("#saved"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1400);
+    } catch (ex) { el.querySelector("#err").textContent = ex.message; }
+    return true;
+  };
+  el.querySelectorAll("input[data-mon]").forEach(i => i.addEventListener("change", async () => { if (!(await save())) i.checked = true; }));
+  el.querySelectorAll("input[data-alias]").forEach(i => {
+    i.addEventListener("input", () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 700); });
+    i.addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(saveTimer); save(); i.blur(); } });
+  });
+  el.querySelectorAll("input[data-app]").forEach(i => i.addEventListener("change", () => native(i.dataset.app, i.checked)));
+  el.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => native(b.dataset.act)));
+  el.querySelector("#scan").addEventListener("click", doScan);
+  el.querySelector("#logout")?.addEventListener("click", async () => {
+    if (!confirm("Von Amazon abmelden? Gespeicherte Messwerte und Namen bleiben erhalten.")) return;
+    await post("/api/logout"); closeSettings();
+  });
+}
+function closeSettings() { SETTINGS_OPEN = false; RENDERED = null; refresh(); }
+document.getElementById("done").addEventListener("click", closeSettings);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && SETTINGS_OPEN) closeSettings(); });
+
+// ------------------------------------------------------------ setup assistant + settings
+const steps = n => `<div class="steps">${["Konto", "Anmelden", "Monitore"].map((t, i) =>
+  `<span class="${i + 1 === n ? "on" : i + 1 < n ? "done" : ""}">${i + 1 < n ? "✓" : i + 1}&nbsp;${t}</span>`).join("")}</div>`;
+const when = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+
+function renderSetup(kind) {
+  const el = document.getElementById("setup"), st = STATUS_DATA, acc = st.account;
+  el.className = kind === "monitors-settings" ? "settings" : "card setup";
+  if (kind === "monitors-settings") return renderSettings(el);
+  if (kind === "account") {
+    el.innerHTML = `${steps(1)}<h2>Amazon-Konto verbinden</h2>
+      <p class="lead">Die Messwerte kommen über Alexa aus deinem Amazon-Konto. Gib das Konto an, mit dem dein Luftqualitätsmonitor eingerichtet ist.</p>
+      <form id="accForm">
+        <label class="field">E-Mail-Adresse<input type="email" name="email" required autocomplete="username" value="${esc(acc?.email)}"></label>
+        <label class="field">Amazon-Shop<select name="domain">${(st.marketplaces || ["amazon.de"]).map(d =>
+          `<option ${d === (acc?.domain || "amazon.de") ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+        <div class="row"><button class="btn primary">Weiter</button>${acc && EDIT_ACCOUNT ? '<button type="button" class="btn" id="cancelAcc">Abbrechen</button>' : ""}</div>
+        <div class="err" id="err"></div></form>`;
+    el.querySelector("#accForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      try { await post("/api/account", { email: f.get("email"), domain: f.get("domain") }); EDIT_ACCOUNT = false; RENDERED = null; refresh(); }
+      catch (ex) { el.querySelector("#err").textContent = ex.message; }
+    });
+    el.querySelector("#cancelAcc")?.addEventListener("click", () => { EDIT_ACCOUNT = false; RENDERED = null; refresh(); });
+  } else if (kind === "login") {
+    const waiting = st.status === "logging_in";
+    el.innerHTML = `${steps(2)}<h2>Bei Amazon anmelden</h2>
+      <p class="lead">Die Anmeldung öffnet sich in deinem Browser direkt auf der Amazon-Seite. Passwort und Bestätigungscode gibst du nur dort ein – die App speichert sie nicht.</p>
+      <div class="row"><a class="btn primary" href="/login" target="_blank" rel="noopener">${waiting ? "Anmeldung erneut öffnen" : "Anmeldung öffnen"}</a>
+        ${waiting ? '<span class="spin"></span><span class="hint" style="margin:0">Warte auf deine Anmeldung …</span>' : ""}</div>
+      ${st.message ? `<div class="err">${esc(st.message)}</div>` : ""}
+      <div class="hint">Konto: ${esc(acc?.email)} (${esc(acc?.domain)}) · <a href="#" id="changeAcc">ändern</a></div>`;
+    el.querySelector("#changeAcc").addEventListener("click", e => { e.preventDefault(); EDIT_ACCOUNT = true; RENDERED = null; refresh(); });
+  } else {
+    const isSetup = kind === "monitors-setup";
+    const rows = MONITORS.map(m => `<div class="mon">
+        <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${esc(m.display)} anzeigen">
+        <input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="Eigener Name">
+        <span class="sub">${m.missing ? "Nicht mehr im Amazon-Konto gefunden" : "In Alexa: " + esc(m.name) + (m.newest_ts ? " · letzte Messung " + when(m.newest_ts) : "")}</span>
+      </div>`).join("");
+    el.innerHTML = `${isSetup ? steps(3) : ""}<h2>${isSetup ? "Monitore auswählen" : "Monitore & Konto"}</h2>
+      <p class="lead">${isSetup ? "Diese Luftqualitätsmonitore wurden in deinem Amazon-Konto gefunden. Wähle aus, welche angezeigt werden sollen – den Namen kannst du hier und später jederzeit ändern."
+        : "Lege fest, welche Monitore angezeigt werden, und gib ihnen eigene Namen. Die Namen gelten nur in dieser App."}</p>
+      <div class="mons">${SCANNING ? '<div class="row" style="margin:0"><span class="spin"></span><span class="hint" style="margin:0">Suche Luftqualitätsmonitore in deinem Amazon-Konto …</span></div>'
+        : rows || '<div class="hint" style="margin:0">Keine Luftqualitätsmonitore in diesem Amazon-Konto gefunden. Ist der Monitor in der Alexa-App eingerichtet?</div>'}</div>
+      <div class="row"><button class="btn primary" id="saveMons" ${MONITORS.length && !SCANNING ? "" : "disabled"}>${isSetup ? "Fertig" : "Speichern"}</button>
+        <button class="btn" id="scan" ${SCANNING ? "disabled" : ""}>Erneut suchen</button>
+        ${isSetup ? "" : '<button class="btn" id="closeSet">Abbrechen</button>'}</div>
+      <div class="err" id="err"></div>
+      ${!isSetup && acc ? `<div class="section-title">Amazon-Konto</div>
+        <div class="hint" style="margin:0">Angemeldet als <b>${esc(acc.email)}</b> (${esc(acc.domain)})</div>
+        <div class="row"><button class="btn danger" id="logout">Abmelden</button></div>` : ""}`;
+    el.querySelector("#saveMons").addEventListener("click", async () => {
+      const monitors = MONITORS.map(m => ({ id: m.id,
+        enabled: el.querySelector(`input[data-id="${CSS.escape(m.id)}"]`).checked,
+        alias: el.querySelector(`input[data-alias="${CSS.escape(m.id)}"]`).value.trim() }));
+      if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = "Bitte mindestens einen Monitor auswählen."; return; }
+      try { MONITORS = await post("/api/monitors", { monitors }); SETTINGS_OPEN = false; RENDERED = null; refresh(); setTimeout(refresh, 4000); }
+      catch (ex) { el.querySelector("#err").textContent = ex.message; }
+    });
+    el.querySelector("#scan").addEventListener("click", doScan);
+    el.querySelector("#closeSet")?.addEventListener("click", () => { SETTINGS_OPEN = false; RENDERED = null; refresh(); });
+    el.querySelector("#logout")?.addEventListener("click", async () => {
+      if (!confirm("Wirklich von Amazon abmelden? Die gespeicherten Messwerte bleiben erhalten.")) return;
+      await post("/api/logout"); SETTINGS_OPEN = false; RENDERED = null; refresh();
+    });
+  }
+}
+
+async function doScan() {
+  SCANNING = true; SCANNED = true; renderSetup(RENDERED || "monitors-setup");
+  try { MONITORS = await post("/api/scan"); }
+  catch (ex) { /* shown below */ }
+  SCANNING = false; renderSetup(RENDERED || "monitors-setup");
+}
+
+document.getElementById("iaqIcon").outerHTML = micon("iaq");
+
+// ------------------------------------------------------------ main refresh
+async function refresh() {
+  clearTimeout(fastTimer);
+  try { [STATUS_DATA, MONITORS] = await Promise.all([api("/api/status"), api("/api/monitors")]); }
+  catch (e) {
+    document.getElementById("meta").textContent = "Server nicht erreichbar";
+    document.getElementById("dot").className = "dot err";
+    fastTimer = setTimeout(refresh, 5000);
+    return;
+  }
+  const st = STATUS_DATA, enabled = MONITORS.filter(m => m.enabled && !m.missing);
+  if (!enabled.some(m => m.id === DEVICE)) DEVICE = (enabled.find(m => m.id === store.get("device")) || enabled[0])?.id || null;
+
+  let kind = null;
+  if (st.status === "needs_account" || EDIT_ACCOUNT) kind = "account";
+  else if (st.status === "login_required" || st.status === "logging_in") kind = "login";
+  else if (st.status === "setup_required") kind = "monitors-setup";
+  else if (SETTINGS_OPEN) kind = "monitors-settings";
+
+  document.getElementById("setup").hidden = !kind;
+  document.getElementById("dash").hidden = !!kind;
+  document.getElementById("gear").hidden = !!kind;                       // settings: "Fertig" instead of the gear
+  document.getElementById("done").hidden = kind !== "monitors-settings";
+  document.getElementById("metaRow").classList.toggle("off", !!kind);   // no status dot/line in setup & settings
+  if (kind) {
+    document.getElementById("title").textContent = kind === "monitors-settings" ? "Einstellungen" : "Einrichtung";
+    document.getElementById("titleRow").classList.add("no-dev");
+    // keep forms the user is editing; the login step re-renders to show progress
+    const key = kind + "|" + st.status + "|" + st.message;
+    if (kind !== RENDERED || key !== RENDER_KEY) renderSetup(kind);
+    RENDERED = kind; RENDER_KEY = key;
+    if (kind === "monitors-setup" && !MONITORS.length && !SCANNED && st.logged_in) doScan();
+    if (kind === "login" || kind === "monitors-setup") fastTimer = setTimeout(refresh, 3000);
+    return;
+  }
+  RENDERED = null;
+  renderSwitch();
+  try { await loadStatus(); await loadHistory(); }
+  catch (e) { document.getElementById("meta").textContent = "Daten konnten nicht geladen werden"; }
+}
+renderCharts(); refresh(); setInterval(refresh, 60000);
+</script>
+</body>
+</html>
