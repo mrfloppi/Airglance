@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1 – 2026-11-23
+
+**New**
+- History: additional time ranges 1 h, 3 h, 6 h and 12 h (besides 24 h, 7 days, 30 days); the chosen range is remembered
+- One-command installer `install.sh` (downloads the newest release, verifies its checksum, installs and starts AirGlance)
+
+**Fixed**
+- "Send test notification" did nothing when macOS had notifications for AirGlance turned off – which can happen
+  after installing a downloaded copy. It now asks for permission, or explains how to allow notifications and
+  opens System Settings → Notifications → AirGlance
+
 ## 0.9.0 – 2026-11-23 · first public beta
 
 First public release of AirGlance, an unofficial macOS menu-bar dashboard for Amazon Smart Air Quality Monitors.
@@ -19,7 +30,6 @@ First public release of AirGlance, an unofficial macOS menu-bar dashboard for Am
 - Settings in macOS style: monitors, notifications, start at login, log, data folder, sign out
 - English and German, following the macOS language
 - Self-contained: ships its own Python runtime, no Homebrew or Python installation needed
-- One-command installer (`install.sh`): downloads the newest release, verifies its checksum, installs and starts AirGlance
 
 **Known limitations**
 - Unofficial API – Amazon may change or block it at any time

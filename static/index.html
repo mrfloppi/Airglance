@@ -79,7 +79,7 @@ h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -.01em; white
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 24px 0 12px; }
 .toolbar h2 { font-size: 16px; margin: 0; font-weight: 620; }
-.seg { display: inline-flex; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.seg { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
 .seg button { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--page); color: var(--text-primary); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
 
@@ -236,6 +236,7 @@ body.compact .tile .name { font-size: 11.5px; }
 body.compact .ampel { top: 9px; right: 9px; padding: 3px; gap: 2px; }
 body.compact .ampel i { width: 7px; height: 7px; }
 
+body.compact .seg button { padding: 5px 9px; font-size: 12px; }
 body.compact .charts { grid-template-columns: 1fr; gap: 8px; }
 body.compact .chart .plot svg { height: 130px; }
 body.compact footer { display: none; }
@@ -364,6 +365,10 @@ body.paused .flow *, body.stale .flow * { animation-play-state: paused; }
       <span id="histHint">Verlauf anzeigen</span></button>
     <div class="hist-body" id="histBody"><div class="hist-inner">
       <div class="seg-row"><div class="seg" role="group" aria-label="Zeitraum">
+        <button data-range="1h" aria-pressed="false">1 Std.</button>
+        <button data-range="3h" aria-pressed="false">3 Std.</button>
+        <button data-range="6h" aria-pressed="false">6 Std.</button>
+        <button data-range="12h" aria-pressed="false">12 Std.</button>
         <button data-range="24h" aria-pressed="true">24 Std.</button>
         <button data-range="7d" aria-pressed="false">7 Tage</button>
         <button data-range="30d" aria-pressed="false">30 Tage</button>
@@ -471,6 +476,7 @@ const fmt = (v, d) => v == null ? "–" : v.toLocaleString(LOCALE, { minimumFrac
 const statusHTML = s => s ? `<span class="status" style="color:${STATUS[s].text}">${STATUS[s].icon}${STATUS[s].label}</span>` : "";
 
 let range = "24h", history = null;
+const RAW_RANGES = ["1h", "3h", "6h", "12h", "24h"];   // raw 5-minute readings; 7d/30d are averaged buckets
 
 // ------------------------------------------------------------ status + tiles
 async function loadStatus() {
@@ -621,6 +627,14 @@ function niceTicks(lo, hi, n = 4) {
 }
 function timeTicks(t0, t1) {
   const span = t1 - t0, out = [];
+  if (span <= 86400 * 1.01) {
+    // up to a day: 15 min … 6 h steps, about 4–6 labels, aligned to the clock
+    const step = [900, 1800, 3600, 7200, 10800, 21600].find(st => span / st <= 6) || 21600;
+    const d = new Date(t0 * 1000), sm = step / 60;
+    d.setHours(0, Math.ceil((d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60) / sm) * sm, 0, 0);
+    for (let t = d.getTime() / 1000; t <= t1; t += step) out.push(t);
+    return out;
+  }
   const step = span <= 86400 * 1.01 ? 6 * 3600 : span <= 7 * 86400 * 1.01 ? 86400 : 7 * 86400;
   const d = new Date(t0 * 1000); d.setMinutes(0, 0, 0);
   if (step >= 86400) d.setHours(0); else d.setHours(Math.ceil(d.getHours() / 6) * 6);
@@ -652,7 +666,7 @@ function drawChart(el, m, pts, t0, t1) {
   if (m.max != null) hi = Math.min(hi, m.max);
   const yt = niceTicks(lo, hi); lo = yt[0]; hi = yt[yt.length - 1];
   const x = t => L + (t - t0) / (t1 - t0) * (W - L - R), y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
-  const gap = (range === "24h" ? 1800 : range === "7d" ? 5400 : 21600);
+  const gap = RAW_RANGES.includes(range) ? 1800 : range === "7d" ? 5400 : 21600;
 
   const segs = []; let cur = [];
   pts.forEach((p, i) => { if (i && p[0] - pts[i - 1][0] > gap) { segs.push(cur); cur = []; } cur.push(p); });
@@ -661,7 +675,7 @@ function drawChart(el, m, pts, t0, t1) {
   const path = s => s.map((p, i) => (i ? "L" : "M") + P(p[0], p[1])).join("");
   const band = s => s.map((p, i) => (i ? "L" : "M") + P(p[0], p[3])).join("") + s.slice().reverse().map(p => "L" + P(p[0], p[2])).join("") + "Z";
   const area = s => path(s) + "L" + P(s[s.length - 1][0], lo) + "L" + P(s[0][0], lo) + "Z";
-  const showBand = range !== "24h";
+  const showBand = !RAW_RANGES.includes(range);
 
   let h = '<g class="axis">';
   const dec = (yt[1] - yt[0]) < 1 ? 1 : 0;
@@ -727,6 +741,7 @@ async function loadHistory(force = false) {
 
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
   range = b.dataset.range;
+  store.set("range", range);
   document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
   loadHistory();
 }));
@@ -984,7 +999,13 @@ document.getElementById("iaqIcon").outerHTML = micon("iaq");
   gear.setAttribute("aria-label", tr("Monitore und Konto verwalten", "Manage monitors and account"));
   document.querySelector(".hero .label").childNodes.forEach(n => { if (n.nodeType === 3 && n.textContent.trim()) n.textContent = METRICS[0].name; });
   if (histBox.classList.contains("hist-closed")) set("#histHint", tr("Verlauf anzeigen", "Show history"));
-  set('[data-range="24h"]', tr("24 Std.", "24 h"));
+  for (const h of [1, 3, 6, 12, 24]) set(`[data-range="${h}h"]`, tr(`${h} Std.`, `${h} h`));
+  // last chosen range
+  const saved = store.get("range");
+  if (saved && document.querySelector(`.seg [data-range="${saved}"]`)) {
+    range = saved;
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.range === saved)));
+  }
   set('[data-range="7d"]', tr("7 Tage", "7 days"));
   set('[data-range="30d"]', tr("30 Tage", "30 days"));
   document.querySelector('.seg').setAttribute("aria-label", tr("Zeitraum", "Time range"));

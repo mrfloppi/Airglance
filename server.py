@@ -472,7 +472,9 @@ async def guard(request: web.Request, handler):
 
 
 # ================================================================ web: API
-RANGES = {"6h": (6 * 3600, 0), "24h": (86400, 0), "7d": (7 * 86400, 1800), "30d": (30 * 86400, 7200)}
+# range -> (span in s, bucket size in s; 0 = raw 5-minute readings)
+RANGES = {"1h": (3600, 0), "3h": (3 * 3600, 0), "6h": (6 * 3600, 0), "12h": (12 * 3600, 0), "24h": (86400, 0),
+          "7d": (7 * 86400, 1800), "30d": (30 * 86400, 7200)}
 
 
 def device_param(req: web.Request) -> str | None:
