@@ -380,6 +380,7 @@ final class StatusWatcher {
 
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     var onClick: (() -> Void)?
+    var log: ((String) -> Void)?
     var enabled: Bool {
         get { UserDefaults.standard.object(forKey: "notifications") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "notifications") }
@@ -388,9 +389,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func setup() {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            NSLog("Mitteilungen erlaubt: \(granted)")
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
+            self?.log?("notifications authorization at launch: granted=\(granted) error=\(error.map { "\($0)" } ?? "none")")
         }
+    }
+
+    /// Current permission as text for the log, e.g. "auth=authorized alert=enabled".
+    static func permissionText(_ s: UNNotificationSettings) -> String {
+        let auth = [UNAuthorizationStatus.notDetermined: "notDetermined", .denied: "denied", .authorized: "authorized",
+                    .provisional: "provisional"][s.authorizationStatus] ?? "\(s.authorizationStatus.rawValue)"
+        let alert = s.alertSetting == .enabled ? "enabled" : s.alertSetting == .disabled ? "disabled" : "notSupported"
+        return "auth=\(auth) alert=\(alert) style=\(s.alertStyle.rawValue)"
     }
 
     func send(_ c: Change, showMonitor: Bool, force: Bool = false) {
@@ -404,8 +413,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         if (rank[c.new] ?? 0) > (rank[c.old] ?? 0) { content.sound = .default }
         content.threadIdentifier = c.monitor   // groups notifications per monitor
         let req = UNNotificationRequest(identifier: "aqm-\(c.metric)-\(Date().timeIntervalSince1970)", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req) { error in
-            if let error { NSLog("Mitteilung fehlgeschlagen: \(error)") }
+        UNUserNotificationCenter.current().add(req) { [weak self] error in
+            self?.log?(error.map { "notification failed: \($0)" } ?? "notification delivered to macOS: \(content.title)")
         }
     }
 
@@ -482,6 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMainMenu()
+        notifier.log = { [weak self] text in DispatchQueue.main.async { self?.appLog(text) } }
         notifier.setup()
         notifier.onClick = { [weak self] in
             guard let self, !self.popover.isShown else { return }
@@ -857,9 +867,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateStatus()
     }
     @objc func toggleNotifications() { notifier.enabled.toggle(); broadcastState() }
+    /// Test button: make sure macOS actually lets us notify; ask, or explain how to allow it.
     @objc func testNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.appLog("test notification – permission: " + Notifier.permissionText(settings))
+                switch settings.authorizationStatus {
+                case .notDetermined:
+                    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                        DispatchQueue.main.async {
+                            self.appLog("notifications authorization on test: granted=\(granted)")
+                            if granted { self.sendTestNotification() } else { self.explainNotificationsOff() }
+                        }
+                    }
+                case .denied:
+                    self.explainNotificationsOff()
+                default:
+                    if settings.alertSetting == .disabled { self.explainNotificationsOff() } else { self.sendTestNotification() }
+                }
+            }
+        }
+    }
+
+    func sendTestNotification() {
         notifier.send(Change(monitor: "Test", metric: "temperature", old: "good", new: "moderate", value: 25.3, direction: "high"),
                       showMonitor: false, force: true)
+    }
+
+    func explainNotificationsOff() {
+        let a = NSAlert()
+        a.messageText = L("Mitteilungen sind für AirGlance ausgeschaltet", "Notifications are turned off for AirGlance")
+        a.informativeText = L("Erlaube sie in den Systemeinstellungen unter Mitteilungen → AirGlance („Mitteilungen erlauben“, Stil „Banner“).",
+                              "Allow them in System Settings → Notifications → AirGlance (“Allow notifications”, style “Banners”).")
+        a.addButton(withTitle: L("Mitteilungseinstellungen öffnen", "Open Notification Settings"))
+        a.addButton(withTitle: L("Abbrechen", "Cancel"))
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=io.github.mrfloppi.airglance") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc func openSettings() {

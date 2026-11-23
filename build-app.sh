@@ -4,7 +4,8 @@
 set -e
 cd "$(dirname "$0")"
 PROJECT="$(pwd)"
-APP="$HOME/Applications/AirGlance.app"
+APP_DIR="${AIRGLANCE_APP_DIR:-$HOME/Applications}"   # e.g. AIRGLANCE_APP_DIR=/Applications
+APP="$APP_DIR/AirGlance.app"
 BUNDLE_ID="io.github.mrfloppi.airglance"
 BUILD="$PROJECT/build"
 
@@ -32,7 +33,7 @@ if [ ! -f "$BUILD/AppIcon.icns" ] || [ app/make_icon.swift -nt "$BUILD/AppIcon.i
 fi
 
 echo "==> Assembling $APP"
-mkdir -p "$HOME/Applications"
+mkdir -p "$APP_DIR"
 # quit a running instance (also the app's previous name "Luftqualität")
 for id in "$BUNDLE_ID" io.github.mrfloppi.airlight local.luftqualitaet; do osascript -e "tell application id \"$id\" to quit" >/dev/null 2>&1 || true; done
 # previous names of this app (pre-release builds) -> Trash
