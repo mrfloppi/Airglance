@@ -35,14 +35,27 @@ Languages: English and German – the app follows your macOS language.
 
 ## Download
 
-**[⬇︎ Download the latest release](https://github.com/mrfloppi/airglance/releases/latest)** – `AirGlance-<version>-macOS-arm64.zip`
+**Quickest way – one command in Terminal:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mrfloppi/Airglance/main/install.sh | bash
+```
+
+The [install script](install.sh) downloads the newest release, checks its SHA-256 checksum, installs
+AirGlance to `/Applications` and starts it. Because it downloads with `curl`, macOS doesn't block the
+app on first launch. Feel free to read the script first – it's short. Run the same command again to update.
+
+**Or download it manually:**
+
+**[⬇︎ Download the latest release](https://github.com/mrfloppi/airglance/releases)** – `AirGlance-<version>-macOS-arm64.zip`
 (Apple Silicon, macOS 13 or later). See the [changelog](CHANGELOG.md) for what's new.
 
 1. Unzip and move **AirGlance.app** to your Applications folder.
-2. The app isn't notarized by Apple (that needs a paid developer account), so macOS blocks the first start.
-   Open it once anyway: try to open it, then go to **System Settings → Privacy & Security** and click
-   **Open Anyway** (on older macOS: right-click the app → **Open**).
-   Alternatively, in Terminal: `xattr -dr com.apple.quarantine /Applications/AirGlance.app`
+2. The app isn't notarized by Apple (that needs a paid developer account), so macOS blocks the first start
+   ("Apple could not verify AirGlance is free of malware"). Click **Done**, open
+   **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to the AirGlance
+   message, then confirm. Since macOS 15 the old right-click → Open trick no longer works.
+   If macOS says the app "is damaged", run: `xattr -dr com.apple.quarantine /Applications/AirGlance.app`
 3. Follow the setup assistant in the menu-bar dashboard.
 
 Optional: verify the download with the `.sha256` file from the release page:
