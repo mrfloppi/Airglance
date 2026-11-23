@@ -29,7 +29,24 @@ charts and notifications – without opening the Alexa app on your phone.
 - Setup assistant (account → Amazon login in your browser → find monitors)
 - Start at login, works after sleep/wake, everything stays on your Mac
 
-UI language: German (English is planned).
+Languages: English and German – the app follows your macOS language.
+
+## Download
+
+**[⬇︎ Download the latest release](https://github.com/mrfloppi/airglance/releases/latest)** – `AirGlance-<version>-macOS-arm64.zip`
+(Apple Silicon, macOS 13 or later). See the [changelog](CHANGELOG.md) for what's new.
+
+1. Unzip and move **AirGlance.app** to your Applications folder.
+2. The app isn't notarized by Apple (that needs a paid developer account), so macOS blocks the first start.
+   Open it once anyway: try to open it, then go to **System Settings → Privacy & Security** and click
+   **Open Anyway** (on older macOS: right-click the app → **Open**).
+   Alternatively, in Terminal: `xattr -dr com.apple.quarantine /Applications/AirGlance.app`
+3. Follow the setup assistant in the menu-bar dashboard.
+
+Optional: verify the download with the `.sha256` file from the release page:
+`shasum -a 256 -c AirGlance-<version>-macOS-arm64.zip.sha256`
+
+Prefer to build it yourself? See [Install (build it yourself)](#install-build-it-yourself).
 
 ## Requirements
 

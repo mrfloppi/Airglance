@@ -69,7 +69,7 @@ async def get_login(domain: str) -> AlexaLogin:
     email = cfg.get("email") or os.environ.get("AQM_EMAIL", "")
     if not email:
         if not sys.stdin or not sys.stdin.isatty():
-            raise RuntimeError("Kein Amazon-Konto eingerichtet: einmalig 'probe.py' im Terminal ausführen")
+            raise RuntimeError("No Amazon account configured: run 'probe.py' once in a terminal")
         email = input("E-Mail deines Amazon-Kontos: ").strip()
     save_private(CONFIG_FILE, {"email": email, "domain": domain})
 
@@ -103,7 +103,7 @@ async def get_login(domain: str) -> AlexaLogin:
 
     if not await login.test_loggedin():
         # RuntimeError (not sys.exit): the server's poll loop must survive a failed login
-        raise RuntimeError("Login konnte nicht bestätigt werden")
+        raise RuntimeError("login_not_confirmed")
     print("✓ Login erfolgreich")
     persist_oauth(login)
     return login

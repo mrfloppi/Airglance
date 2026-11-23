@@ -11,6 +11,12 @@ let kPort = 47823
 let kBase = URL(string: "http://127.0.0.1:\(kPort)/")!
 let kPopoverWidth: CGFloat = 540
 
+// MARK: - Language: German if macOS prefers German, otherwise English
+
+let kIsGerman = Locale.preferredLanguages.first?.lowercased().hasPrefix("de") ?? false
+let kLang = kIsGerman ? "de" : "en"
+func L(_ de: String, _ en: String) -> String { kIsGerman ? de : en }
+
 // MARK: - Backend process
 
 final class Backend {
@@ -47,7 +53,8 @@ final class Backend {
     var startProblem: String? {
         let python = Bundle.main.resourceURL!.appendingPathComponent("python/bin/python3").resolvingSymlinksInPath()
         if !FileManager.default.isExecutableFile(atPath: python.path) {
-            return "Die eingebaute Python-Umgebung fehlt oder ist beschädigt. Bitte AirGlance neu installieren bzw. im Projektordner <code>./build-app.sh</code> ausführen."
+            return L("Die eingebaute Python-Umgebung fehlt oder ist beschädigt. Bitte AirGlance neu installieren bzw. im Projektordner <code>./build-app.sh</code> ausführen.",
+                     "The embedded Python runtime is missing or damaged. Please reinstall AirGlance or run <code>./build-app.sh</code> in the project folder.")
         }
         return nil
     }
@@ -148,7 +155,7 @@ final class DashboardView: NSObject, WKNavigationDelegate, WKUIDelegate {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
-        showMessage("Dashboard wird gestartet …")
+        showMessage(L("Dashboard wird gestartet …", "Starting dashboard …"))
     }
 
     func showMessage(_ text: String) {
@@ -166,7 +173,8 @@ final class DashboardView: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func loadDashboard(compact: Bool = false) {
-        let url = compact ? URL(string: "?compact=1", relativeTo: kBase)!.absoluteURL : kBase
+        let query = compact ? "?compact=1&lang=\(kLang)" : "?lang=\(kLang)"
+        let url = URL(string: query, relativeTo: kBase)!.absoluteURL
         webView.load(URLRequest(url: url))
     }
 
@@ -188,7 +196,7 @@ final class DashboardView: NSObject, WKNavigationDelegate, WKUIDelegate {
         let a = NSAlert()
         a.messageText = message
         a.addButton(withTitle: "OK")
-        a.addButton(withTitle: "Abbrechen")
+        a.addButton(withTitle: L("Abbrechen", "Cancel"))
         NSApp.activate(ignoringOtherApps: true)
         completionHandler(a.runModal() == .alertFirstButtonReturn)
     }
@@ -260,11 +268,13 @@ struct Change {
 }
 
 func statusLabel(_ s: String) -> String {
-    ["good": "Gut", "moderate": "Mäßig", "poor": "Schlecht"][s] ?? "unbekannt"
+    kIsGerman ? (["good": "Gut", "moderate": "Mäßig", "poor": "Schlecht"][s] ?? "unbekannt")
+              : (["good": "Good", "moderate": "Moderate", "poor": "Poor"][s] ?? "unknown")
 }
 
 func num(_ v: Double, _ decimals: Int) -> String {
-    String(format: "%.\(decimals)f", v).replacingOccurrences(of: ".", with: ",")
+    let s = String(format: "%.\(decimals)f", v)
+    return kIsGerman ? s.replacingOccurrences(of: ".", with: ",") : s
 }
 
 /// Short, plain-language notification text: headline + what to do.
@@ -272,35 +282,51 @@ func describe(_ c: Change) -> (title: String, body: String) {
     let poor = c.new == "poor"
     let v = c.value
     if c.new == "good" {
-        let what: [String: String] = ["iaq": "Luftqualität", "pm25": "Feinstaub", "pm10": "Grobstaub", "voc": "Ausdünstungen (VOC)",
-                                      "co": "Kohlenmonoxid", "temperature": "Temperatur", "humidity": "Luftfeuchtigkeit"]
+        let what: [String: String] = kIsGerman
+            ? ["iaq": "Luftqualität", "pm25": "Feinstaub", "pm10": "Grobstaub", "voc": "Ausdünstungen (VOC)",
+               "co": "Kohlenmonoxid", "temperature": "Temperatur", "humidity": "Luftfeuchtigkeit"]
+            : ["iaq": "Air quality", "pm25": "Fine dust", "pm10": "Coarse dust", "voc": "VOC",
+               "co": "Carbon monoxide", "temperature": "Temperature", "humidity": "Humidity"]
         let val: [String: String] = ["iaq": "Score \(num(v, 0))/100", "pm25": "\(num(v, 0)) µg/m³", "pm10": "\(num(v, 0)) µg/m³",
                                      "voc": "Index \(num(v, 0))", "co": "\(num(v, 0)) ppm", "temperature": "\(num(v, 1)) °C",
                                      "humidity": "\(num(v, 0)) %"]
-        return ("✅ \(what[c.metric] ?? c.metric) wieder im grünen Bereich", "Aktuell \(val[c.metric] ?? num(v, 1)).")
+        let name = what[c.metric] ?? c.metric, value = val[c.metric] ?? num(v, 1)
+        return (L("✅ \(name) wieder im grünen Bereich", "✅ \(name) back to good"), L("Aktuell \(value).", "Now \(value)."))
     }
     let dot = poor ? "🔴" : "🟡"
     switch c.metric {
     case "iaq":
-        return ("\(dot) Luftqualität \(poor ? "schlecht" : "mäßig")",
-                "Score \(num(v, 0)) von 100. \(poor ? "Jetzt gründlich lüften." : "Kurz lüften hilft meist.")")
+        return (L("\(dot) Luftqualität \(poor ? "schlecht" : "mäßig")", "\(dot) Air quality \(poor ? "poor" : "moderate")"),
+                L("Score \(num(v, 0)) von 100. \(poor ? "Jetzt gründlich lüften." : "Kurz lüften hilft meist.")",
+                  "Score \(num(v, 0)) of 100. \(poor ? "Air the room thoroughly now." : "A short airing usually helps.")"))
     case "pm25", "pm10":
-        return ("\(dot) \(poor ? "Viel" : "Erhöhter") \(c.metric == "pm25" ? "Feinstaub" : "Grobstaub")",
-                "\(num(v, 0)) µg/m³ – Fenster öffnen oder Luftreiniger einschalten.")
+        let fine = c.metric == "pm25"
+        return (L("\(dot) \(poor ? "Viel" : "Erhöhter") \(fine ? "Feinstaub" : "Grobstaub")",
+                  "\(dot) \(poor ? "High" : "Elevated") \(fine ? "fine dust" : "coarse dust")"),
+                L("\(num(v, 0)) µg/m³ – Fenster öffnen oder Luftreiniger einschalten.",
+                  "\(num(v, 0)) µg/m³ – open a window or switch on an air purifier."))
     case "voc":
-        return ("\(dot) \(poor ? "Viele" : "Mehr") Ausdünstungen in der Luft",
-                "VOC-Index \(num(v, 0)) – z. B. von Reinigungsmitteln, Kochen oder Farbe. Kurz lüften.")
+        return (L("\(dot) \(poor ? "Viele" : "Mehr") Ausdünstungen in der Luft", "\(dot) \(poor ? "Lots of" : "More") fumes in the air"),
+                L("VOC-Index \(num(v, 0)) – z. B. von Reinigungsmitteln, Kochen oder Farbe. Kurz lüften.",
+                  "VOC index \(num(v, 0)) – e.g. from cleaning products, cooking or paint. Air the room briefly."))
     case "co":
-        return (poor ? "🔴 Kohlenmonoxid gefährlich hoch" : "🟡 Kohlenmonoxid erhöht",
-                "\(num(v, 0)) ppm – sofort lüften und Gasgeräte oder Kamin prüfen.")
+        return (poor ? L("🔴 Kohlenmonoxid gefährlich hoch", "🔴 Carbon monoxide dangerously high")
+                     : L("🟡 Kohlenmonoxid erhöht", "🟡 Carbon monoxide elevated"),
+                L("\(num(v, 0)) ppm – sofort lüften und Gasgeräte oder Kamin prüfen.",
+                  "\(num(v, 0)) ppm – ventilate now and check gas appliances or the fireplace."))
     case "temperature":
         let hot = c.direction != "low"
-        return ("\(dot) \(hot ? (poor ? "Viel zu warm" : "Zu warm") : (poor ? "Viel zu kalt" : "Zu kühl"))",
-                "\(num(v, 1)) °C – angenehm sind 19 bis 24 °C.\(hot ? " Heizung runterdrehen oder lüften." : "")")
+        let head = hot ? (poor ? L("Viel zu warm", "Much too warm") : L("Zu warm", "Too warm"))
+                       : (poor ? L("Viel zu kalt", "Much too cold") : L("Zu kühl", "Too cool"))
+        return ("\(dot) \(head)",
+                L("\(num(v, 1)) °C – angenehm sind 19 bis 24 °C.\(hot ? " Heizung runterdrehen oder lüften." : "")",
+                  "\(num(v, 1)) °C – 19 to 24 °C is comfortable.\(hot ? " Turn the heating down or air the room." : "")"))
     case "humidity":
         let wet = c.direction != "low"
-        return ("\(dot) Luft \(poor ? "sehr " : "zu ")\(wet ? "feucht" : "trocken")",
-                "\(num(v, 0)) % – ideal sind 40 bis 60 %.\(wet ? " Lüften, sonst droht Schimmel." : "")")
+        return (L("\(dot) Luft \(poor ? "sehr " : "zu ")\(wet ? "feucht" : "trocken")",
+                  "\(dot) Air \(poor ? "very " : "too ")\(wet ? "humid" : "dry")"),
+                L("\(num(v, 0)) % – ideal sind 40 bis 60 %.\(wet ? " Lüften, sonst droht Schimmel." : "")",
+                  "\(num(v, 0)) % – 40 to 60 % is ideal.\(wet ? " Air the room to prevent mould." : "")"))
     default:
         return ("\(dot) \(c.metric): \(statusLabel(c.new))", num(v, 1))
     }
@@ -447,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         if let problem = backend.startProblem {
             popoverView.showMessage("⚠️ " + problem)
-            statusItem.button?.toolTip = "AirGlance: Hintergrunddienst kann nicht starten"
+            statusItem.button?.toolTip = L("AirGlance: Hintergrunddienst kann nicht starten", "AirGlance: background service cannot start")
             return
         }
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -464,7 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.windowView?.loadDashboard(compact: false)
                 self.updateStatus()
             } else {
-                self.popoverView.showMessage("Backend startet nicht. Log: \(self.backend.logURL.path)")
+                self.popoverView.showMessage(L("Hintergrunddienst startet nicht. Log: ", "Background service does not start. Log: ") + self.backend.logURL.path)
             }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.updateStatus() }
@@ -625,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applyOverview(_ o: [String: Any]?) {
         guard let button = statusItem.button else { return }
-        guard let o else { button.image = trafficLightImage(.unknown); button.toolTip = "AirGlance: keine Verbindung zum Hintergrunddienst"; return }
+        guard let o else { button.image = trafficLightImage(.unknown); button.toolTip = L("AirGlance: keine Verbindung zum Hintergrunddienst", "AirGlance: no connection to the background service"); return }
         let state = o["status"] as? String ?? ""
         let monitors = (o["monitors"] as? [[String: Any]]) ?? []
         monitorCount = monitors.count
@@ -641,16 +667,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let iaq = metrics["iaq"]
             let s = stale ? AirStatus.unknown : AirStatus(rawValue: iaq?["status"] as? String ?? "") ?? .unknown
             if rank[s]! > rank[worst]! { worst = s }
-            if stale { lines.append("\(name): keine aktuellen Messwerte") }
+            if stale { lines.append("\(name): " + L("keine aktuellen Messwerte", "no current readings")) }
             else if let v = (iaq?["value"] as? NSNumber)?.doubleValue { lines.append("\(name): \(Int(v))/100 – \(statusLabel(s.rawValue))") }
             if !stale { watcher.check(monitorId: m["id"] as? String ?? name, monitorName: name, metrics: metrics) }
         }
         var tip = lines.isEmpty ? "AirGlance" : lines.joined(separator: "\n")
         let needsLogin = ["login_required", "logging_in", "needs_account"].contains(state)
         if allStale && state == "ok" { worst = .offline }   // like the device's purple light
-        if needsLogin { worst = .setup; tip = "AirGlance: Anmeldung bei Amazon nötig" }
-        if state == "setup_required" { worst = .setup; tip = "AirGlance: bitte Monitore auswählen" }
-        if state == "error" { tip += "\n(letzter Abruf fehlgeschlagen)" }
+        if needsLogin { worst = .setup; tip = L("AirGlance: Anmeldung bei Amazon nötig", "AirGlance: Amazon sign-in required") }
+        if state == "setup_required" { worst = .setup; tip = L("AirGlance: bitte Monitore auswählen", "AirGlance: choose your monitors") }
+        if state == "error" { tip += L("\n(letzter Abruf fehlgeschlagen)", "\n(last update failed)") }
         button.image = trafficLightImage(worst)
         button.toolTip = tip
         healthChanged(needsLogin ? "login_required" : (allStale && state == "ok") ? "stale" : state == "ok" ? "ok" : nil,
@@ -664,14 +690,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard lastHealth != nil || health != "ok" else { return }   // no "all good" message at start
         switch health {
         case "login_required":
-            notifier.sendInfo(title: "🔑 Bitte erneut bei Amazon anmelden",
-                              body: "Ohne Anmeldung kommen keine neuen Messwerte. Hier klicken zum Anmelden.", url: loginURL)
+            notifier.sendInfo(title: L("🔑 Bitte erneut bei Amazon anmelden", "🔑 Please sign in to Amazon again"),
+                              body: L("Ohne Anmeldung kommen keine neuen Messwerte. Hier klicken zum Anmelden.",
+                                      "No new readings without signing in. Click here to sign in."), url: loginURL)
         case "stale":
-            notifier.sendInfo(title: "📡 Monitor sendet keine Daten",
-                              body: "Seit über 20 Minuten keine neuen Werte. Ist der Monitor eingesteckt und im WLAN?")
+            notifier.sendInfo(title: L("📡 Monitor sendet keine Daten", "📡 Monitor isn't sending data"),
+                              body: L("Seit über 20 Minuten keine neuen Werte. Ist der Monitor eingesteckt und im WLAN?",
+                                      "No new readings for over 20 minutes. Is the monitor plugged in and on Wi-Fi?"))
         default:
             if lastHealth == "stale" || lastHealth == "login_required" {
-                notifier.sendInfo(title: "✅ Wieder verbunden", body: "Es kommen wieder aktuelle Messwerte.")
+                notifier.sendInfo(title: L("✅ Wieder verbunden", "✅ Connected again"),
+                                  body: L("Es kommen wieder aktuelle Messwerte.", "Current readings are coming in again."))
             }
         }
     }
@@ -719,29 +748,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Dashboard im Fenster öffnen", action: #selector(openWindow), keyEquivalent: "")
-        menu.addItem(withTitle: "Monitore & Konto …", action: #selector(openSettings), keyEquivalent: "")
-        menu.addItem(withTitle: "Neu laden", action: #selector(reload), keyEquivalent: "")
-        menu.addItem(.separator())
-        let n = menu.addItem(withTitle: "Mitteilungen bei Ampelwechsel", action: #selector(toggleNotifications), keyEquivalent: "")
-        n.state = notifier.enabled ? .on : .off
-        menu.addItem(withTitle: "Test-Mitteilung senden", action: #selector(testNotification), keyEquivalent: "")
-        let auto = menu.addItem(withTitle: "Mit dem System starten", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        auto.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Log anzeigen", action: #selector(showLog), keyEquivalent: "")
-        menu.addItem(withTitle: "Datenordner öffnen", action: #selector(showData), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Von Amazon abmelden …", action: #selector(logout), keyEquivalent: "")
-        menu.addItem(withTitle: "AirGlance beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        for item in menu.items where item.action != #selector(NSApplication.terminate(_:)) { item.target = self }
-        let symbols = ["Dashboard im Fenster öffnen": "macwindow", "Monitore & Konto …": "gearshape", "Neu laden": "arrow.clockwise",
-                       "Mitteilungen bei Ampelwechsel": "bell", "Test-Mitteilung senden": "paperplane",
-                       "Mit dem System starten": "power", "Log anzeigen": "doc.text", "Datenordner öffnen": "folder",
-                       "Von Amazon abmelden …": "rectangle.portrait.and.arrow.right", "AirGlance beenden": "xmark.circle"]
-        for item in menu.items {
-            if let name = symbols[item.title] { item.image = NSImage(systemSymbolName: name, accessibilityDescription: nil) }
+        func add(_ de: String, _ en: String, _ symbol: String, _ action: Selector, key: String = "", on: Bool? = nil) {
+            let item = menu.addItem(withTitle: L(de, en), action: action, keyEquivalent: key)
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            if let on { item.state = on ? .on : .off }
+            if action != #selector(NSApplication.terminate(_:)) { item.target = self }
         }
+        add("Dashboard im Fenster öffnen", "Open dashboard in a window", "macwindow", #selector(openWindow))
+        add("Monitore & Konto …", "Monitors & account …", "gearshape", #selector(openSettings))
+        add("Neu laden", "Reload", "arrow.clockwise", #selector(reload))
+        menu.addItem(.separator())
+        add("Mitteilungen bei Ampelwechsel", "Notify on traffic-light changes", "bell", #selector(toggleNotifications), on: notifier.enabled)
+        add("Test-Mitteilung senden", "Send test notification", "paperplane", #selector(testNotification))
+        add("Mit dem System starten", "Start at login", "power", #selector(toggleLaunchAtLogin), on: SMAppService.mainApp.status == .enabled)
+        menu.addItem(.separator())
+        add("Log anzeigen", "Show log", "doc.text", #selector(showLog))
+        add("Datenordner öffnen", "Open data folder", "folder", #selector(showData))
+        menu.addItem(.separator())
+        add("Von Amazon abmelden …", "Sign out of Amazon …", "rectangle.portrait.and.arrow.right", #selector(logout))
+        add("AirGlance beenden", "Quit AirGlance", "xmark.circle", #selector(NSApplication.terminate(_:)), key: "q")
         if let button = statusItem.button {
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
         }
@@ -802,8 +827,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if on { try service.register() } else { try service.unregister() }
         } catch {
             let a = NSAlert()
-            a.messageText = "Autostart konnte nicht geändert werden"
-            a.informativeText = "\(error.localizedDescription)\n\nAlternativ: Systemeinstellungen → Allgemein → Anmeldeobjekte."
+            a.messageText = L("Autostart konnte nicht geändert werden", "Couldn't change start at login")
+            a.informativeText = error.localizedDescription + L("\n\nAlternativ: Systemeinstellungen → Allgemein → Anmeldeobjekte.",
+                                                                 "\n\nAlternatively: System Settings → General → Login Items.")
             NSApp.activate(ignoringOtherApps: true)
             a.runModal()
         }
@@ -812,10 +838,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc func logout() {
         let a = NSAlert()
-        a.messageText = "Von Amazon abmelden?"
-        a.informativeText = "Die App holt danach keine neuen Messwerte mehr, bis du dich wieder anmeldest. Gespeicherte Werte und Monitor-Namen bleiben erhalten."
-        a.addButton(withTitle: "Abmelden")
-        a.addButton(withTitle: "Abbrechen")
+        a.messageText = L("Von Amazon abmelden?", "Sign out of Amazon?")
+        a.informativeText = L("Die App holt danach keine neuen Messwerte mehr, bis du dich wieder anmeldest. Gespeicherte Werte und Monitor-Namen bleiben erhalten.",
+                              "The app won't fetch new readings until you sign in again. Saved readings and monitor names are kept.")
+        a.addButton(withTitle: L("Abmelden", "Sign out"))
+        a.addButton(withTitle: L("Abbrechen", "Cancel"))
         NSApp.activate(ignoringOtherApps: true)
         guard a.runModal() == .alertFirstButtonReturn else { return }
         post("api/logout") { [weak self] in
@@ -832,26 +859,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let main = NSMenu()
         let appItem = NSMenuItem(); main.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Über AirGlance", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L("Über AirGlance", "About AirGlance"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "AirGlance beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L("AirGlance beenden", "Quit AirGlance"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem(); main.addItem(editItem)
-        let edit = NSMenu(title: "Bearbeiten")
-        edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Alles auswählen", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let edit = NSMenu(title: L("Bearbeiten", "Edit"))
+        edit.addItem(withTitle: L("Kopieren", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("Alles auswählen", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
 
         let viewItem = NSMenuItem(); main.addItem(viewItem)
-        let view = NSMenu(title: "Darstellung")
-        let r = view.addItem(withTitle: "Neu laden", action: #selector(reload), keyEquivalent: "r"); r.target = self
+        let view = NSMenu(title: L("Darstellung", "View"))
+        let r = view.addItem(withTitle: L("Neu laden", "Reload"), action: #selector(reload), keyEquivalent: "r"); r.target = self
         viewItem.submenu = view
 
         let winItem = NSMenuItem(); main.addItem(winItem)
-        let win = NSMenu(title: "Fenster")
-        win.addItem(withTitle: "Schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        win.addItem(withTitle: "Minimieren", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        let win = NSMenu(title: L("Fenster", "Window"))
+        win.addItem(withTitle: L("Schließen", "Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        win.addItem(withTitle: L("Minimieren", "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         winItem.submenu = win
         NSApp.mainMenu = main
     }

@@ -379,42 +379,74 @@ body.paused .flow *, body.stale .flow * { animation-play-state: paused; }
 
 <script>
 if (new URLSearchParams(location.search).has("compact")) document.body.classList.add("compact");
+// language: ?lang= from the Mac app (macOS language), otherwise the browser language; German or English
+const LANG = (new URLSearchParams(location.search).get("lang") || navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
+const LOCALE = LANG === "de" ? "de-DE" : (navigator.language && navigator.language.startsWith("en") ? navigator.language : "en-GB");
+const tr = (de, en) => LANG === "de" ? de : en;
+document.documentElement.lang = LANG;
+// message codes sent by the backend
+const MSG = {
+  session_expired: tr("Die Amazon-Sitzung ist abgelaufen.", "Your Amazon session has expired."),
+  login_timeout: tr("Die Anmeldung wurde nicht rechtzeitig abgeschlossen.", "Sign-in wasn't completed in time."),
+  login_not_confirmed: tr("Amazon hat die Anmeldung nicht bestätigt. Bitte erneut versuchen.", "Amazon didn't confirm the sign-in. Please try again."),
+  invalid_account: tr("Bitte eine gültige E-Mail-Adresse und einen Amazon-Shop angeben.", "Enter a valid e-mail address and Amazon store."),
+  not_logged_in: tr("Nicht bei Amazon angemeldet.", "Not signed in to Amazon."),
+};
+const msg = m => MSG[m] || m;
+
 const METRICS = [
-  { key: "iaq",         name: "Luftqualitäts-Score", unit: "",       dec: 0, min: 0, max: 100, refs: [[65, "Gut ab 65"], [35, "Mäßig ab 35"]],
+  { key: "iaq", name: tr("Luftqualitäts-Score", "Air quality score"), unit: "", dec: 0, min: 0, max: 100,
+    refs: [[65, tr("Gut ab 65", "Good from 65")], [35, tr("Mäßig ab 35", "Moderate from 35")]],
     status: v => v >= 65 ? "good" : v >= 35 ? "moderate" : "poor",
-    info: "Gesamtbewertung des Monitors aus Feinstaub, VOC, Kohlenmonoxid und Luftfeuchte. Je höher, desto besser.",
+    info: tr("Gesamtbewertung des Monitors aus Feinstaub, VOC, Kohlenmonoxid und Luftfeuchte. Je höher, desto besser.",
+             "The monitor's overall rating from particulate matter, VOC, carbon monoxide and humidity. Higher is better."),
     bands: { good: "65 – 100", moderate: "35 – 64", poor: "0 – 34" },
-    source: "Grenzen vom Gerät selbst (Amazon)" },
-  { key: "pm25",        name: "Feinstaub PM2.5",     unit: "µg/m³",  dec: 0, min: 0, refs: [[12, "Gut bis 12"], [35, "Mäßig bis 35"]],
+    source: tr("Grenzen vom Gerät selbst (Amazon)", "Thresholds reported by the device (Amazon)") },
+  { key: "pm25", name: tr("Feinstaub PM2.5", "Particulate PM2.5"), unit: "µg/m³", dec: 0, min: 0,
+    refs: [[12, tr("Gut bis 12", "Good up to 12")], [35, tr("Mäßig bis 35", "Moderate up to 35")]],
     status: v => v <= 12 ? "good" : v <= 35 ? "moderate" : "poor",
-    info: "Sehr feine Partikel unter 2,5 µm, z. B. aus Kochen, Kerzen, Rauch oder Verkehr. Sie gelangen tief in die Lunge.",
-    bands: { good: "0 – 12 µg/m³", moderate: "13 – 35 µg/m³", poor: "über 35 µg/m³" },
-    source: "Richtwerte nach US-EPA (die WHO empfiehlt im Jahresmittel sogar ≤ 5 µg/m³)" },
-  { key: "pm10",        name: "Feinstaub PM10",      unit: "µg/m³",  dec: 0, min: 0, refs: [[54, "Gut bis 54"]],
+    info: tr("Sehr feine Partikel unter 2,5 µm, z. B. aus Kochen, Kerzen, Rauch oder Verkehr. Sie gelangen tief in die Lunge.",
+             "Very fine particles below 2.5 µm, e.g. from cooking, candles, smoke or traffic. They reach deep into the lungs."),
+    bands: { good: "0 – 12 µg/m³", moderate: "13 – 35 µg/m³", poor: tr("über 35 µg/m³", "above 35 µg/m³") },
+    source: tr("Richtwerte nach US-EPA (die WHO empfiehlt im Jahresmittel sogar ≤ 5 µg/m³)",
+               "US EPA guidance (the WHO even recommends ≤ 5 µg/m³ as an annual mean)") },
+  { key: "pm10", name: tr("Feinstaub PM10", "Particulate PM10"), unit: "µg/m³", dec: 0, min: 0,
+    refs: [[54, tr("Gut bis 54", "Good up to 54")]],
     status: v => v <= 54 ? "good" : v <= 154 ? "moderate" : "poor",
-    info: "Gröbere Partikel unter 10 µm, z. B. Hausstaub und Pollen. Amazon liefert hierfür keine Historie, nur Live-Werte.",
-    bands: { good: "0 – 54 µg/m³", moderate: "55 – 154 µg/m³", poor: "über 154 µg/m³" },
-    source: "Richtwerte nach US-EPA" },
-  { key: "voc",         name: "VOC",                 unit: "Index",  dec: 0, min: 0, refs: [[30, "Gut bis 30"]],
+    info: tr("Gröbere Partikel unter 10 µm, z. B. Hausstaub und Pollen. Amazon liefert hierfür keine Historie, nur Live-Werte.",
+             "Coarser particles below 10 µm, e.g. house dust and pollen. Amazon provides no history for this, only live values."),
+    bands: { good: "0 – 54 µg/m³", moderate: "55 – 154 µg/m³", poor: tr("über 154 µg/m³", "above 154 µg/m³") },
+    source: tr("Richtwerte nach US-EPA", "US EPA guidance") },
+  { key: "voc", name: "VOC", unit: "Index", dec: 0, min: 0, refs: [[30, tr("Gut bis 30", "Good up to 30")]],
     status: v => v <= 30 ? "good" : v <= 60 ? "moderate" : "poor",
-    info: "Flüchtige organische Verbindungen, z. B. aus Reinigungsmitteln, Farben, Möbeln, Parfum oder beim Kochen. Amazon-eigener Index von 0 bis 100, niedriger ist besser.",
-    bands: { good: "0 – 30", moderate: "31 – 60", poor: "über 60" },
-    source: "Geschätzte Grenzen: Amazon veröffentlicht keine Schwellen für den VOC-Index" },
-  { key: "co",          name: "Kohlenmonoxid",       unit: "ppm",    dec: 0, min: 0, refs: [[9, "Grenzwert 9"]],
+    info: tr("Flüchtige organische Verbindungen, z. B. aus Reinigungsmitteln, Farben, Möbeln, Parfum oder beim Kochen. Amazon-eigener Index von 0 bis 100, niedriger ist besser.",
+             "Volatile organic compounds, e.g. from cleaning products, paint, furniture, perfume or cooking. Amazon's own index from 0 to 100, lower is better."),
+    bands: { good: "0 – 30", moderate: "31 – 60", poor: tr("über 60", "above 60") },
+    source: tr("Geschätzte Grenzen: Amazon veröffentlicht keine Schwellen für den VOC-Index",
+               "Estimated thresholds: Amazon publishes none for the VOC index") },
+  { key: "co", name: tr("Kohlenmonoxid", "Carbon monoxide"), unit: "ppm", dec: 0, min: 0, refs: [[9, tr("Grenzwert 9", "Limit 9")]],
     status: v => v <= 9 ? "good" : v <= 35 ? "moderate" : "poor",
-    info: "Geruchloses Gas aus unvollständiger Verbrennung (Gastherme, Kamin, Abgase). Der Monitor ersetzt keinen zertifizierten CO-Melder.",
-    bands: { good: "0 – 9 ppm", moderate: "10 – 35 ppm", poor: "über 35 ppm" },
-    source: "Richtwerte nach WHO / US-EPA (8-Stunden-Mittel 9 ppm)" },
-  { key: "temperature", name: "Temperatur",          unit: "°C",     dec: 1, refs: [[24, "Behaglich 19–24 °C"], [19, ""]],
+    info: tr("Geruchloses Gas aus unvollständiger Verbrennung (Gastherme, Kamin, Abgase). Der Monitor ersetzt keinen zertifizierten CO-Melder.",
+             "Odourless gas from incomplete combustion (gas boiler, fireplace, exhaust). The monitor is no substitute for a certified CO alarm."),
+    bands: { good: "0 – 9 ppm", moderate: "10 – 35 ppm", poor: tr("über 35 ppm", "above 35 ppm") },
+    source: tr("Richtwerte nach US-EPA: 9 ppm im 8-Stunden-Mittel, 35 ppm im 1-Stunden-Mittel (WHO ähnlich)",
+               "US EPA guidance: 9 ppm as an 8-hour mean, 35 ppm as a 1-hour mean (WHO similar)") },
+  { key: "temperature", name: tr("Temperatur", "Temperature"), unit: "°C", dec: 1,
+    refs: [[24, tr("Behaglich 19–24 °C", "Comfortable 19–24 °C")], [19, ""]],
     status: v => v >= 19 && v <= 24 ? "good" : v >= 17 && v <= 26 ? "moderate" : "poor",
-    info: "Raumtemperatur. Für Wohn- und Arbeitsräume gelten etwa 19 bis 24 °C als behaglich, im Schlafzimmer eher 16 bis 19 °C.",
-    bands: { good: "19 – 24 °C", moderate: "17 – 18,9 °C oder 24,1 – 26 °C", poor: "unter 17 °C oder über 26 °C" },
-    source: "Übliche Behaglichkeitswerte für Wohnräume" },
-  { key: "humidity",    name: "Luftfeuchtigkeit",    unit: "%",      dec: 0, refs: [[60, "Ideal 40–60 %"], [40, ""]],
+    info: tr("Raumtemperatur. Für Wohn- und Arbeitsräume gelten etwa 19 bis 24 °C als behaglich, im Schlafzimmer eher 16 bis 19 °C.",
+             "Room temperature. About 19 to 24 °C is comfortable for living and working spaces, 16 to 19 °C for bedrooms."),
+    bands: { good: "19 – 24 °C", moderate: tr("17 – 18,9 °C oder 24,1 – 26 °C", "17 – 18.9 °C or 24.1 – 26 °C"),
+             poor: tr("unter 17 °C oder über 26 °C", "below 17 °C or above 26 °C") },
+    source: tr("Übliche Behaglichkeitswerte für Wohnräume", "Common comfort range for living spaces") },
+  { key: "humidity", name: tr("Luftfeuchtigkeit", "Humidity"), unit: "%", dec: 0,
+    refs: [[60, tr("Ideal 40–60 %", "Ideal 40–60 %")], [40, ""]],
     status: v => v >= 40 && v <= 60 ? "good" : v >= 30 && v <= 70 ? "moderate" : "poor",
-    info: "Relative Luftfeuchte. Zu trockene Luft reizt Augen und Schleimhäute, zu feuchte Luft fördert Schimmel und Milben.",
-    bands: { good: "40 – 60 %", moderate: "30 – 39 % oder 61 – 70 %", poor: "unter 30 % oder über 70 %" },
-    source: "Übliche Empfehlung für Innenräume" },
+    info: tr("Relative Luftfeuchte. Zu trockene Luft reizt Augen und Schleimhäute, zu feuchte Luft fördert Schimmel und Milben.",
+             "Relative humidity. Air that's too dry irritates eyes and mucous membranes; air that's too humid encourages mould and dust mites."),
+    bands: { good: "40 – 60 %", moderate: tr("30 – 39 % oder 61 – 70 %", "30 – 39 % or 61 – 70 %"),
+             poor: tr("unter 30 % oder über 70 %", "below 30 % or above 70 %") },
+    source: tr("Übliche Empfehlung für Innenräume", "Common indoor recommendation") },
 ];
 // one small line icon per measurement (24x24, stroke = currentColor)
 const M_ICONS = {
@@ -428,14 +460,14 @@ const M_ICONS = {
 };
 const micon = k => `<svg class="m-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${M_ICONS[k] || ""}</svg>`;
 const STATUS = {
-  good:     { label: "Gut",      color: "var(--led-good)",     text: "var(--good-text)",
+  good:     { label: tr("Gut", "Good"),      color: "var(--led-good)",     text: "var(--good-text)",
               icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--led-good)"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-  moderate: { label: "Mäßig",    color: "var(--led-moderate)",  text: "var(--warning-text)",
+  moderate: { label: tr("Mäßig", "Moderate"),    color: "var(--led-moderate)",  text: "var(--warning-text)",
               icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l7 12.5H1z" fill="var(--led-moderate)"/><path d="M8 6v4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12" r=".9" fill="#000"/></svg>' },
-  poor:     { label: "Schlecht", color: "var(--led-poor)", text: "var(--critical-text)",
+  poor:     { label: tr("Schlecht", "Poor"), color: "var(--led-poor)", text: "var(--critical-text)",
               icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--led-poor)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>' },
 };
-const fmt = (v, d) => v == null ? "–" : v.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmt = (v, d) => v == null ? "–" : v.toLocaleString(LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 const statusHTML = s => s ? `<span class="status" style="color:${STATUS[s].text}">${STATUS[s].icon}${STATUS[s].label}</span>` : "";
 
 let range = "24h", history = null;
@@ -452,17 +484,18 @@ async function loadStatus() {
   const tsAll = Object.values(latest).map(x => x.ts);
   const newest = tsAll.length ? Math.max(...tsAll) : null;
   document.getElementById("meta").textContent = newest
-    ? "Messung von " + new Date(newest * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) + " · Abruf alle " + Math.round(st.interval / 60) + " Min."
-    : "Noch keine Messwerte";
+    ? tr("Messung von ", "Reading from ") + new Date(newest * 1000).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })
+      + tr(" · Abruf alle ", " · updates every ") + Math.round(st.interval / 60) + " min"
+    : tr("Noch keine Messwerte", "No readings yet");
   document.body.classList.toggle("stale", !!st.stale && !!newest);
   if (st.stale && newest && st.status === "ok") dot.className = "dot";   // grey dot: data not current
   if (false) {
   } else if (st.stale && newest) {
     banner.style.display = "block";
-    banner.textContent = "Keine neuen Messwerte seit " + new Date(newest * 1000).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" })
-      + " – ist der Monitor eingeschaltet und im WLAN?";
+    banner.textContent = tr("Keine neuen Messwerte seit ", "No new readings since ") + new Date(newest * 1000).toLocaleString(LOCALE, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+      + tr(" – ist der Monitor eingeschaltet und im WLAN?", " – is the monitor switched on and connected to Wi-Fi?");
   } else if (st.status === "error") {
-    banner.style.display = "block"; banner.textContent = "Abruf fehlgeschlagen: " + st.message;
+    banner.style.display = "block"; banner.textContent = tr("Abruf fehlgeschlagen: ", "Update failed: ") + msg(st.message);
   } else banner.style.display = "none";
   try { SPARK = (await api("/api/history?range=6h")).series || {}; } catch { SPARK = {}; }
 
@@ -596,8 +629,8 @@ function timeTicks(t0, t1) {
 }
 function tickLabel(t, span) {
   const d = new Date(t * 1000);
-  return span <= 86400 * 1.01 ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
-                              : d.toLocaleDateString("de-DE", { day: "numeric", month: "numeric" });
+  return span <= 86400 * 1.01 ? d.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" })
+                              : d.toLocaleDateString(LOCALE, { day: "numeric", month: "numeric" });
 }
 
 function drawChart(el, m, pts, t0, t1) {
@@ -607,7 +640,7 @@ function drawChart(el, m, pts, t0, t1) {
   const W = plot.clientWidth, H = svg.clientHeight || 170, L = 34, R = 8, T = 10, B = 22;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   if (!pts || !pts.length) {
-    svg.innerHTML = `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">Noch keine Daten in diesem Zeitraum</text>`;
+    svg.innerHTML = `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">${tr("Noch keine Daten in diesem Zeitraum", "No data for this period yet")}</text>`;
     el.querySelector(".sub").textContent = ""; return;
   }
   const vals = pts.flatMap(p => [p[2], p[3]]);
@@ -656,7 +689,7 @@ function drawChart(el, m, pts, t0, t1) {
   svg.innerHTML = h;
 
   const avg = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-  el.querySelector(".sub").textContent = `Ø ${fmt(avg, m.dec)} · Min ${fmt(Math.min(...pts.map(p => p[2])), m.dec)} · Max ${fmt(Math.max(...pts.map(p => p[3])), m.dec)} ${m.unit}`;
+  el.querySelector(".sub").textContent = `${tr("Ø", "Avg")} ${fmt(avg, m.dec)} · Min ${fmt(Math.min(...pts.map(p => p[2])), m.dec)} · Max ${fmt(Math.max(...pts.map(p => p[3])), m.dec)} ${m.unit}`;
 
   const hover = svg.querySelector(".hover"), cross = hover.querySelector("line"), mk = hover.querySelector("circle");
   const hit = svg.querySelector(".hit");
@@ -666,9 +699,9 @@ function drawChart(el, m, pts, t0, t1) {
     let best = pts[0]; for (const p of pts) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
     const px = x(best[0]), py = y(best[1]);
     hover.style.display = ""; cross.setAttribute("x1", px); cross.setAttribute("x2", px); mk.setAttribute("cx", px); mk.setAttribute("cy", py);
-    const when = new Date(best[0] * 1000).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    const extra = showBand && best[2] !== best[3] ? `<div class="t">Spanne ${fmt(best[2], m.dec)} – ${fmt(best[3], m.dec)}</div>` : "";
-    tip.innerHTML = `<div class="t">${when}${showBand ? " · Ø" : ""}</div><b>${fmt(best[1], m.dec)}</b> ${m.unit}${extra}`;
+    const when = new Date(best[0] * 1000).toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    const extra = showBand && best[2] !== best[3] ? `<div class="t">${tr("Spanne", "Range")} ${fmt(best[2], m.dec)} – ${fmt(best[3], m.dec)}</div>` : "";
+    tip.innerHTML = `<div class="t">${when}${showBand ? " · " + tr("Ø", "avg") : ""}</div><b>${fmt(best[1], m.dec)}</b> ${m.unit}${extra}`;
     tip.style.display = "block";
     const sx = px * r.width / W, tw = tip.offsetWidth;
     tip.style.left = Math.min(Math.max(sx - tw / 2, 0), r.width - tw) + "px";
@@ -681,7 +714,7 @@ function renderCharts() {
   const box = document.getElementById("charts");
   if (!box.children.length) box.innerHTML = METRICS.map(m => `<div class="card chart" data-key="${m.key}">
       <h3>${micon(m.key)}${m.name}${m.unit ? ` <span style="color:var(--text-muted);font-weight:500">(${m.unit})</span>` : ""}</h3>
-      <div class="sub"></div><div class="plot"><svg role="img" aria-label="Verlauf ${m.name}"></svg><div class="tip"></div></div></div>`).join("");
+      <div class="sub"></div><div class="plot"><svg role="img" aria-label="${tr("Verlauf", "History")} ${m.name}"></svg><div class="tip"></div></div></div>`).join("");
   if (!history) return;
   METRICS.forEach(m => drawChart(box.querySelector(`[data-key="${m.key}"]`), m, history.series[m.key], history.since, history.now));
 }
@@ -731,13 +764,13 @@ async function setHistory(open) {
   if (open) { try { await loadHistory(true); } catch { /* show anyway */ } }   // fill first, then animate open
   histBox.classList.toggle("hist-closed", !open);
   histToggle.setAttribute("aria-expanded", String(open));
-  document.getElementById("histHint").textContent = open ? "Verlauf ausblenden" : "Verlauf anzeigen";
+  document.getElementById("histHint").textContent = open ? tr("Verlauf ausblenden", "Hide history") : tr("Verlauf anzeigen", "Show history");
   store.set("historyOpen", open ? "1" : "0");
 }
 histToggle.addEventListener("click", () => setHistory(histBox.classList.contains("hist-closed")));
 if (store.get("historyOpen") === "1") {
   histBox.classList.remove("hist-closed"); histToggle.setAttribute("aria-expanded", "true");
-  document.getElementById("histHint").textContent = "Verlauf ausblenden";
+  document.getElementById("histHint").textContent = tr("Verlauf ausblenden", "Hide history");
 }
 
 // ------------------------------------------------------------ monitor switcher + settings button
@@ -794,55 +827,55 @@ const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentC
 function renderSettings(el) {
   const acc = STATUS_DATA.account;
   const monRows = MONITORS.map(m => `<div class="item">${ico("device", m.missing ? "#8e8e93" : "#30b0c7")}
-      <span class="txt"><input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="Name für ${esc(m.name)}">
-        <small>${m.missing ? "Nicht mehr im Amazon-Konto gefunden" : "In Alexa: " + esc(m.name) + (m.newest_ts ? " · zuletzt " + when(m.newest_ts) : "")}</small></span>
-      <input type="checkbox" class="switch-ctl" data-mon="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${esc(m.display)} anzeigen">
+      <span class="txt"><input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="${tr("Name für", "Name for")} ${esc(m.name)}">
+        <small>${m.missing ? tr("Nicht mehr im Amazon-Konto gefunden", "No longer found in the Amazon account") : "In Alexa: " + esc(m.name) + (m.newest_ts ? tr(" · zuletzt ", " · last ") + when(m.newest_ts) : "")}</small></span>
+      <input type="checkbox" class="switch-ctl" data-mon="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${tr("anzeigen:", "show:")} ${esc(m.display)}">
     </div>`).join("");
   el.innerHTML = `
-    <div class="section-title">Monitore <span class="saved" id="saved">✓ Gespeichert</span></div>
+    <div class="section-title">${tr("Monitore", "Monitors")} <span class="saved" id="saved">✓ ${tr("Gespeichert", "Saved")}</span></div>
     <div class="group">${monRows}
-      <button class="item" id="scan" ${SCANNING ? "disabled" : ""}>${ico("search", "#5856d6")}<span class="txt">${SCANNING ? "Suche läuft …" : "Erneut suchen"}<small>Neue Monitore im Amazon-Konto finden</small></span>${SCANNING ? '<span class="spin"></span>' : CHEV}</button>
+      <button class="item" id="scan" ${SCANNING ? "disabled" : ""}>${ico("search", "#5856d6")}<span class="txt">${SCANNING ? tr("Suche läuft …", "Searching …") : tr("Erneut suchen", "Search again")}<small>${tr("Neue Monitore im Amazon-Konto finden", "Find new monitors in your Amazon account")}</small></span>${SCANNING ? '<span class="spin"></span>' : CHEV}</button>
     </div>
-    <div class="hint">Mit dem Schalter blendest du einen Monitor ein oder aus. Eigene Namen gelten nur in dieser App.</div>
+    <div class="hint">${tr("Mit dem Schalter blendest du einen Monitor ein oder aus. Eigene Namen gelten nur in dieser App.", "Use the switch to show or hide a monitor. Custom names only apply in this app.")}</div>
     <div class="err" id="err"></div>
     ${NATIVE ? `
-    <div class="section-title">Mitteilungen</div>
+    <div class="section-title">${tr("Mitteilungen", "Notifications")}</div>
     <div class="group">
-      <label class="item">${ico("bell", "#ff3b30")}<span class="txt">Bei Ampelwechsel benachrichtigen<small>z. B. „Zu warm“ oder „Luft zu feucht“</small></span>
+      <label class="item">${ico("bell", "#ff3b30")}<span class="txt">${tr("Bei Ampelwechsel benachrichtigen", "Notify on traffic-light changes")}<small>${tr("z. B. „Zu warm“ oder „Luft zu feucht“", "e.g. “Too warm” or “Air too humid”")}</small></span>
         <input type="checkbox" class="switch-ctl" data-app="notifications" ${APP_STATE.notifications ? "checked" : ""}></label>
-      <button class="item" data-act="test">${ico("send", "#ff9500")}<span class="txt">Test-Mitteilung senden</span>${CHEV}</button>
+      <button class="item" data-act="test">${ico("send", "#ff9500")}<span class="txt">${tr("Test-Mitteilung senden", "Send test notification")}</span>${CHEV}</button>
     </div>
-    <div class="section-title">Allgemein</div>
+    <div class="section-title">${tr("Allgemein", "General")}</div>
     <div class="group">
-      <label class="item">${ico("power", "#34c759")}<span class="txt">Mit dem System starten<small>Startet automatisch nach der Anmeldung am Mac</small></span>
+      <label class="item">${ico("power", "#34c759")}<span class="txt">${tr("Mit dem System starten", "Start at login")}<small>${tr("Startet automatisch nach der Anmeldung am Mac", "Starts automatically when you log in to your Mac")}</small></span>
         <input type="checkbox" class="switch-ctl" data-app="autostart" ${APP_STATE.autostart ? "checked" : ""}></label>
-      <button class="item" data-act="openWindow">${ico("window", "#007aff")}<span class="txt">Dashboard im Fenster öffnen</span>${CHEV}</button>
-      <button class="item" data-act="reload">${ico("reload", "#8e8e93")}<span class="txt">Neu laden</span>${CHEV}</button>
+      <button class="item" data-act="openWindow">${ico("window", "#007aff")}<span class="txt">${tr("Dashboard im Fenster öffnen", "Open dashboard in a window")}</span>${CHEV}</button>
+      <button class="item" data-act="reload">${ico("reload", "#8e8e93")}<span class="txt">${tr("Neu laden", "Reload")}</span>${CHEV}</button>
     </div>
-    <div class="section-title">Hilfe & Fehlersuche</div>
+    <div class="section-title">${tr("Hilfe & Fehlersuche", "Help & troubleshooting")}</div>
     <div class="group">
-      <button class="item" data-act="showLog">${ico("doc", "#8e8e93")}<span class="txt">Log anzeigen</span>${CHEV}</button>
-      <button class="item" data-act="showData">${ico("folder", "#5ac8fa")}<span class="txt">Datenordner öffnen</span>${CHEV}</button>
+      <button class="item" data-act="showLog">${ico("doc", "#8e8e93")}<span class="txt">${tr("Log anzeigen", "Show log")}</span>${CHEV}</button>
+      <button class="item" data-act="showData">${ico("folder", "#5ac8fa")}<span class="txt">${tr("Datenordner öffnen", "Open data folder")}</span>${CHEV}</button>
     </div>` : ""}
-    ${acc ? `<div class="section-title">Amazon-Konto</div>
+    ${acc ? `<div class="section-title">${tr("Amazon-Konto", "Amazon account")}</div>
     <div class="group">
       <div class="item">${ico("user", "#8e8e93")}<span class="txt">${esc(acc.email)}<small>${esc(acc.domain)}</small></span></div>
-      <button class="item danger" id="logout">${ico("logout", "#ff3b30")}<span class="txt">Abmelden<small style="color:var(--text-muted)">Gespeicherte Werte und Namen bleiben erhalten</small></span></button>
+      <button class="item danger" id="logout">${ico("logout", "#ff3b30")}<span class="txt">${tr("Abmelden", "Sign out")}<small style="color:var(--text-muted)">${tr("Gespeicherte Werte und Namen bleiben erhalten", "Saved readings and names are kept")}</small></span></button>
     </div>` : ""}
     ${NATIVE ? `<div class="group" style="margin-top:20px">
-      <button class="item" data-act="quit">${ico("quit", "#8e8e93")}<span class="txt">AirGlance beenden</span></button></div>` : ""}`;
+      <button class="item" data-act="quit">${ico("quit", "#8e8e93")}<span class="txt">${tr("AirGlance beenden", "Quit AirGlance")}</span></button></div>` : ""}`;
 
   let saveTimer;
   const save = async () => {
     const monitors = MONITORS.map(m => ({ id: m.id,
       enabled: el.querySelector(`input[data-mon="${CSS.escape(m.id)}"]`).checked,
       alias: el.querySelector(`input[data-alias="${CSS.escape(m.id)}"]`).value.trim() }));
-    if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = "Mindestens ein Monitor muss eingeschaltet bleiben."; return false; }
+    if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = tr("Mindestens ein Monitor muss eingeschaltet bleiben.", "At least one monitor must stay switched on."); return false; }
     el.querySelector("#err").textContent = "";
     try {
       MONITORS = await post("/api/monitors", { monitors });
       const s = el.querySelector("#saved"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1400);
-    } catch (ex) { el.querySelector("#err").textContent = ex.message; }
+    } catch (ex) { el.querySelector("#err").textContent = msg(ex.message); }
     return true;
   };
   el.querySelectorAll("input[data-mon]").forEach(i => i.addEventListener("change", async () => { if (!(await save())) i.checked = true; }));
@@ -854,7 +887,7 @@ function renderSettings(el) {
   el.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => native(b.dataset.act)));
   el.querySelector("#scan").addEventListener("click", doScan);
   el.querySelector("#logout")?.addEventListener("click", async () => {
-    if (!confirm("Von Amazon abmelden? Gespeicherte Messwerte und Namen bleiben erhalten.")) return;
+    if (!confirm(tr("Von Amazon abmelden? Gespeicherte Messwerte und Namen bleiben erhalten.", "Sign out of Amazon? Saved readings and names are kept."))) return;
     await post("/api/logout"); closeSettings();
   });
 }
@@ -863,70 +896,70 @@ document.getElementById("done").addEventListener("click", closeSettings);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && SETTINGS_OPEN) closeSettings(); });
 
 // ------------------------------------------------------------ setup assistant + settings
-const steps = n => `<div class="steps">${["Konto", "Anmelden", "Monitore"].map((t, i) =>
+const steps = n => `<div class="steps">${[tr("Konto", "Account"), tr("Anmelden", "Sign in"), tr("Monitore", "Monitors")].map((t, i) =>
   `<span class="${i + 1 === n ? "on" : i + 1 < n ? "done" : ""}">${i + 1 < n ? "✓" : i + 1}&nbsp;${t}</span>`).join("")}</div>`;
-const when = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const when = ts => ts ? new Date(ts * 1000).toLocaleString(LOCALE, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
 
 function renderSetup(kind) {
   const el = document.getElementById("setup"), st = STATUS_DATA, acc = st.account;
   el.className = kind === "monitors-settings" ? "settings" : "card setup";
   if (kind === "monitors-settings") return renderSettings(el);
   if (kind === "account") {
-    el.innerHTML = `${steps(1)}<h2>Amazon-Konto verbinden</h2>
-      <p class="lead">Die Messwerte kommen über Alexa aus deinem Amazon-Konto. Gib das Konto an, mit dem dein Luftqualitätsmonitor eingerichtet ist.</p>
+    el.innerHTML = `${steps(1)}<h2>${tr("Amazon-Konto verbinden", "Connect your Amazon account")}</h2>
+      <p class="lead">${tr("Die Messwerte kommen über Alexa aus deinem Amazon-Konto. Gib das Konto an, mit dem dein Luftqualitätsmonitor eingerichtet ist.", "Readings come from your Amazon account via Alexa. Enter the account your air quality monitor is set up with.")}</p>
       <form id="accForm">
-        <label class="field">E-Mail-Adresse<input type="email" name="email" required autocomplete="username" value="${esc(acc?.email)}"></label>
-        <label class="field">Amazon-Shop<select name="domain">${(st.marketplaces || ["amazon.de"]).map(d =>
+        <label class="field">${tr("E-Mail-Adresse", "E-mail address")}<input type="email" name="email" required autocomplete="username" value="${esc(acc?.email)}"></label>
+        <label class="field">${tr("Amazon-Shop", "Amazon store")}<select name="domain">${(st.marketplaces || ["amazon.de"]).map(d =>
           `<option ${d === (acc?.domain || "amazon.de") ? "selected" : ""}>${d}</option>`).join("")}</select></label>
-        <div class="row"><button class="btn primary">Weiter</button>${acc && EDIT_ACCOUNT ? '<button type="button" class="btn" id="cancelAcc">Abbrechen</button>' : ""}</div>
+        <div class="row"><button class="btn primary">${tr("Weiter", "Continue")}</button>${acc && EDIT_ACCOUNT ? `<button type="button" class="btn" id="cancelAcc">${tr("Abbrechen", "Cancel")}</button>` : ""}</div>
         <div class="err" id="err"></div></form>`;
     el.querySelector("#accForm").addEventListener("submit", async e => {
       e.preventDefault();
       const f = new FormData(e.target);
       try { await post("/api/account", { email: f.get("email"), domain: f.get("domain") }); EDIT_ACCOUNT = false; RENDERED = null; refresh(); }
-      catch (ex) { el.querySelector("#err").textContent = ex.message; }
+      catch (ex) { el.querySelector("#err").textContent = msg(ex.message); }
     });
     el.querySelector("#cancelAcc")?.addEventListener("click", () => { EDIT_ACCOUNT = false; RENDERED = null; refresh(); });
   } else if (kind === "login") {
     const waiting = st.status === "logging_in";
-    el.innerHTML = `${steps(2)}<h2>Bei Amazon anmelden</h2>
-      <p class="lead">Die Anmeldung öffnet sich in deinem Browser direkt auf der Amazon-Seite. Passwort und Bestätigungscode gibst du nur dort ein – die App speichert sie nicht.</p>
-      <div class="row"><a class="btn primary" href="/login" target="_blank" rel="noopener">${waiting ? "Anmeldung erneut öffnen" : "Anmeldung öffnen"}</a>
-        ${waiting ? '<span class="spin"></span><span class="hint" style="margin:0">Warte auf deine Anmeldung …</span>' : ""}</div>
-      ${st.message ? `<div class="err">${esc(st.message)}</div>` : ""}
-      <div class="hint">Konto: ${esc(acc?.email)} (${esc(acc?.domain)}) · <a href="#" id="changeAcc">ändern</a></div>`;
+    el.innerHTML = `${steps(2)}<h2>${tr("Bei Amazon anmelden", "Sign in to Amazon")}</h2>
+      <p class="lead">${tr("Die Anmeldung öffnet sich in deinem Browser direkt auf der Amazon-Seite. Passwort und Bestätigungscode gibst du nur dort ein – die App speichert sie nicht.", "Sign-in opens in your browser on Amazon's own page. You enter your password and verification code only there – the app doesn't store them.")}</p>
+      <div class="row"><a class="btn primary" href="/login" target="_blank" rel="noopener">${waiting ? tr("Anmeldung erneut öffnen", "Open sign-in again") : tr("Anmeldung öffnen", "Open sign-in")}</a>
+        ${waiting ? `<span class="spin"></span><span class="hint" style="margin:0">${tr("Warte auf deine Anmeldung …", "Waiting for you to sign in …")}</span>` : ""}</div>
+      ${st.message ? `<div class="err">${esc(msg(st.message))}</div>` : ""}
+      <div class="hint">${tr("Konto", "Account")}: ${esc(acc?.email)} (${esc(acc?.domain)}) · <a href="#" id="changeAcc">${tr("ändern", "change")}</a></div>`;
     el.querySelector("#changeAcc").addEventListener("click", e => { e.preventDefault(); EDIT_ACCOUNT = true; RENDERED = null; refresh(); });
   } else {
     const isSetup = kind === "monitors-setup";
     const rows = MONITORS.map(m => `<div class="mon">
-        <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${esc(m.display)} anzeigen">
-        <input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="Eigener Name">
-        <span class="sub">${m.missing ? "Nicht mehr im Amazon-Konto gefunden" : "In Alexa: " + esc(m.name) + (m.newest_ts ? " · letzte Messung " + when(m.newest_ts) : "")}</span>
+        <input type="checkbox" data-id="${esc(m.id)}" ${m.enabled ? "checked" : ""} ${m.missing ? "disabled" : ""} aria-label="${tr("anzeigen:", "show:")} ${esc(m.display)}">
+        <input type="text" data-alias="${esc(m.id)}" value="${esc(m.alias)}" placeholder="${esc(m.name)}" maxlength="60" aria-label="${tr("Eigener Name", "Custom name")}">
+        <span class="sub">${m.missing ? tr("Nicht mehr im Amazon-Konto gefunden", "No longer found in the Amazon account") : "In Alexa: " + esc(m.name) + (m.newest_ts ? tr(" · letzte Messung ", " · last reading ") + when(m.newest_ts) : "")}</span>
       </div>`).join("");
-    el.innerHTML = `${isSetup ? steps(3) : ""}<h2>${isSetup ? "Monitore auswählen" : "Monitore & Konto"}</h2>
-      <p class="lead">${isSetup ? "Diese Luftqualitätsmonitore wurden in deinem Amazon-Konto gefunden. Wähle aus, welche angezeigt werden sollen – den Namen kannst du hier und später jederzeit ändern."
-        : "Lege fest, welche Monitore angezeigt werden, und gib ihnen eigene Namen. Die Namen gelten nur in dieser App."}</p>
-      <div class="mons">${SCANNING ? '<div class="row" style="margin:0"><span class="spin"></span><span class="hint" style="margin:0">Suche Luftqualitätsmonitore in deinem Amazon-Konto …</span></div>'
-        : rows || '<div class="hint" style="margin:0">Keine Luftqualitätsmonitore in diesem Amazon-Konto gefunden. Ist der Monitor in der Alexa-App eingerichtet?</div>'}</div>
-      <div class="row"><button class="btn primary" id="saveMons" ${MONITORS.length && !SCANNING ? "" : "disabled"}>${isSetup ? "Fertig" : "Speichern"}</button>
-        <button class="btn" id="scan" ${SCANNING ? "disabled" : ""}>Erneut suchen</button>
-        ${isSetup ? "" : '<button class="btn" id="closeSet">Abbrechen</button>'}</div>
+    el.innerHTML = `${isSetup ? steps(3) : ""}<h2>${isSetup ? tr("Monitore auswählen", "Choose your monitors") : tr("Monitore & Konto", "Monitors & account")}</h2>
+      <p class="lead">${isSetup ? tr("Diese Luftqualitätsmonitore wurden in deinem Amazon-Konto gefunden. Wähle aus, welche angezeigt werden sollen – den Namen kannst du hier und später jederzeit ändern.", "These air quality monitors were found in your Amazon account. Choose which ones to show – you can change their names here and at any time later.")
+        : tr("Lege fest, welche Monitore angezeigt werden, und gib ihnen eigene Namen. Die Namen gelten nur in dieser App.", "Choose which monitors are shown and give them your own names. Names only apply in this app.")}</p>
+      <div class="mons">${SCANNING ? `<div class="row" style="margin:0"><span class="spin"></span><span class="hint" style="margin:0">${tr("Suche Luftqualitätsmonitore in deinem Amazon-Konto …", "Looking for air quality monitors in your Amazon account …")}</span></div>`
+        : rows || `<div class="hint" style="margin:0">${tr("Keine Luftqualitätsmonitore in diesem Amazon-Konto gefunden. Ist der Monitor in der Alexa-App eingerichtet?", "No air quality monitors found in this Amazon account. Is the monitor set up in the Alexa app?")}</div>`}</div>
+      <div class="row"><button class="btn primary" id="saveMons" ${MONITORS.length && !SCANNING ? "" : "disabled"}>${isSetup ? tr("Fertig", "Done") : tr("Speichern", "Save")}</button>
+        <button class="btn" id="scan" ${SCANNING ? "disabled" : ""}>${tr("Erneut suchen", "Search again")}</button>
+        ${isSetup ? "" : `<button class="btn" id="closeSet">${tr("Abbrechen", "Cancel")}</button>`}</div>
       <div class="err" id="err"></div>
-      ${!isSetup && acc ? `<div class="section-title">Amazon-Konto</div>
-        <div class="hint" style="margin:0">Angemeldet als <b>${esc(acc.email)}</b> (${esc(acc.domain)})</div>
-        <div class="row"><button class="btn danger" id="logout">Abmelden</button></div>` : ""}`;
+      ${!isSetup && acc ? `<div class="section-title">${tr("Amazon-Konto", "Amazon account")}</div>
+        <div class="hint" style="margin:0">${tr("Angemeldet als", "Signed in as")} <b>${esc(acc.email)}</b> (${esc(acc.domain)})</div>
+        <div class="row"><button class="btn danger" id="logout">${tr("Abmelden", "Sign out")}</button></div>` : ""}`;
     el.querySelector("#saveMons").addEventListener("click", async () => {
       const monitors = MONITORS.map(m => ({ id: m.id,
         enabled: el.querySelector(`input[data-id="${CSS.escape(m.id)}"]`).checked,
         alias: el.querySelector(`input[data-alias="${CSS.escape(m.id)}"]`).value.trim() }));
-      if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = "Bitte mindestens einen Monitor auswählen."; return; }
+      if (!monitors.some(m => m.enabled)) { el.querySelector("#err").textContent = tr("Bitte mindestens einen Monitor auswählen.", "Choose at least one monitor."); return; }
       try { MONITORS = await post("/api/monitors", { monitors }); SETTINGS_OPEN = false; RENDERED = null; refresh(); setTimeout(refresh, 4000); }
-      catch (ex) { el.querySelector("#err").textContent = ex.message; }
+      catch (ex) { el.querySelector("#err").textContent = msg(ex.message); }
     });
     el.querySelector("#scan").addEventListener("click", doScan);
     el.querySelector("#closeSet")?.addEventListener("click", () => { SETTINGS_OPEN = false; RENDERED = null; refresh(); });
     el.querySelector("#logout")?.addEventListener("click", async () => {
-      if (!confirm("Wirklich von Amazon abmelden? Die gespeicherten Messwerte bleiben erhalten.")) return;
+      if (!confirm(tr("Wirklich von Amazon abmelden? Die gespeicherten Messwerte bleiben erhalten.", "Sign out of Amazon? Your saved readings are kept."))) return;
       await post("/api/logout"); SETTINGS_OPEN = false; RENDERED = null; refresh();
     });
   }
@@ -941,12 +974,30 @@ async function doScan() {
 
 document.getElementById("iaqIcon").outerHTML = micon("iaq");
 
+// texts in the static markup
+(function staticTexts() {
+  const set = (sel, text) => { const el = document.querySelector(sel); if (el) el.textContent = text; };
+  set("#done", tr("Fertig", "Done"));
+  set("#meta", tr("Lade …", "Loading …"));
+  const gear = document.getElementById("gear");
+  gear.title = tr("Monitore & Konto", "Monitors & account");
+  gear.setAttribute("aria-label", tr("Monitore und Konto verwalten", "Manage monitors and account"));
+  document.querySelector(".hero .label").childNodes.forEach(n => { if (n.nodeType === 3 && n.textContent.trim()) n.textContent = METRICS[0].name; });
+  if (histBox.classList.contains("hist-closed")) set("#histHint", tr("Verlauf anzeigen", "Show history"));
+  set('[data-range="24h"]', tr("24 Std.", "24 h"));
+  set('[data-range="7d"]', tr("7 Tage", "7 days"));
+  set('[data-range="30d"]', tr("30 Tage", "30 days"));
+  document.querySelector('.seg').setAttribute("aria-label", tr("Zeitraum", "Time range"));
+  set("footer", tr("Daten: Amazon Smart Air Quality Monitor über die Alexa-Cloud. Der Verlauf wird lokal gespeichert.",
+                   "Data: Amazon Smart Air Quality Monitor via the Alexa cloud. History is stored locally."));
+})();
+
 // ------------------------------------------------------------ main refresh
 async function refresh() {
   clearTimeout(fastTimer);
   try { [STATUS_DATA, MONITORS] = await Promise.all([api("/api/status"), api("/api/monitors")]); }
   catch (e) {
-    document.getElementById("meta").textContent = "Server nicht erreichbar";
+    document.getElementById("meta").textContent = tr("Hintergrunddienst nicht erreichbar", "Background service not reachable");
     document.getElementById("dot").className = "dot err";
     fastTimer = setTimeout(refresh, 5000);
     return;
@@ -966,7 +1017,7 @@ async function refresh() {
   document.getElementById("done").hidden = kind !== "monitors-settings";
   document.getElementById("metaRow").classList.toggle("off", !!kind);   // no status dot/line in setup & settings
   if (kind) {
-    document.getElementById("title").textContent = kind === "monitors-settings" ? "Einstellungen" : "Einrichtung";
+    document.getElementById("title").textContent = kind === "monitors-settings" ? tr("Einstellungen", "Settings") : tr("Einrichtung", "Setup");
     document.getElementById("titleRow").classList.add("no-dev");
     // keep forms the user is editing; the login step re-renders to show progress
     const key = kind + "|" + st.status + "|" + st.message;
@@ -979,7 +1030,7 @@ async function refresh() {
   RENDERED = null;
   renderSwitch();
   try { await loadStatus(); await loadHistory(); }
-  catch (e) { document.getElementById("meta").textContent = "Daten konnten nicht geladen werden"; }
+  catch (e) { document.getElementById("meta").textContent = tr("Daten konnten nicht geladen werden", "Couldn't load data"); }
 }
 renderCharts(); refresh(); setInterval(refresh, 60000);
 </script>

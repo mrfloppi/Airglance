@@ -114,7 +114,7 @@ def _connect() -> sqlite3.Connection:
     con = sqlite3.connect(DB_PATH)
     cols = [r[1] for r in con.execute("PRAGMA table_info(readings)")]
     if cols and "device" not in cols:  # migrate single-monitor schema -> per-device rows
-        log.info("Migriere Datenbank auf mehrere Monitore")
+        log.info("Migrating database to multi-monitor schema")
         with con:
             con.execute("ALTER TABLE readings RENAME TO readings_v1")
             con.execute(
@@ -157,7 +157,7 @@ class Settings:
 
     @staticmethod
     def display(m: dict) -> str:
-        return (m.get("alias") or "").strip() or m.get("name") or "Luftqualitätsmonitor"
+        return (m.get("alias") or "").strip() or m.get("name") or "Air Quality Monitor"
 
     def public(self) -> list[dict]:
         out = []
@@ -208,7 +208,7 @@ class Account:
                 self.login = login
                 return True
         except Exception:
-            log.exception("Gespeicherte Sitzung nicht nutzbar")
+            log.exception("Saved session not usable")
         await login.close()
         return False
 
@@ -234,18 +234,18 @@ class Account:
             deadline = time.time() + LOGIN_TIMEOUT
             while not (login.authorization_code or login.access_token):
                 if time.time() > deadline:
-                    raise TimeoutError("Anmeldung nicht abgeschlossen (Zeitlimit)")
+                    raise TimeoutError("login_timeout")   # message codes are translated by the dashboard
                 await asyncio.sleep(1)
             await asyncio.sleep(1)
             if not await login.test_loggedin():
-                raise RuntimeError("Amazon hat die Anmeldung nicht bestätigt")
+                raise RuntimeError("login_not_confirmed")
             probe.persist_oauth(login)
             if self.login:
                 await self.login.close()
             self.login = login
-            log.info("Bei Amazon angemeldet")
+            log.info("Signed in to Amazon")
         except Exception as ex:
-            log.warning("Anmeldung fehlgeschlagen: %s", ex)
+            log.warning("Sign-in failed: %s", ex)
             self.error = str(ex)
             await login.close()
         finally:
@@ -270,7 +270,7 @@ class Account:
         for f in probe.AUTH.glob("*"):
             if f.name != probe.CONFIG_FILE.name:  # keep e-mail/marketplace to prefill the form
                 f.unlink(missing_ok=True)
-        log.info("Abgemeldet")
+        log.info("Signed out")
         WAKE.set()
 
     async def drop_session(self) -> None:
@@ -298,12 +298,12 @@ async def discover(login: AlexaLogin) -> None:
     )
     items = ((r.get("data") or {}).get("endpoints") or {}).get("items")
     if items is None:
-        raise RuntimeError(f"Gerätesuche fehlgeschlagen: {r.get('errors')}")
+        raise RuntimeError(f"Device discovery failed: {r.get('errors')}")
     found = {}
     for it in items:
         la = it.get("legacyAppliance") or {}
         if "AIR_QUALITY_MONITOR" in (la.get("applianceTypes") or []) and la.get("entityId"):
-            found[la["entityId"]] = {"endpoint_id": it["id"], "name": la.get("friendlyName") or "Luftqualitätsmonitor"}
+            found[la["entityId"]] = {"endpoint_id": it["id"], "name": la.get("friendlyName") or "Air Quality Monitor"}
     for i, f in found.items():
         m = SETTINGS.monitors.setdefault(i, {"enabled": False, "alias": ""})
         m.update(f)
@@ -321,7 +321,7 @@ async def discover(login: AlexaLogin) -> None:
                 SETTINGS.monitors[target]["enabled"] = True
                 SETTINGS.configured = True
     SETTINGS.save()
-    log.info("Gerätesuche: %d Luftqualitätsmonitor(e) gefunden", len(found))
+    log.info("Device discovery: %d air quality monitor(s) found", len(found))
 
 
 HISTORY_QUERY = """query($i: AirQualityHistoryInput!) { airQualityHistory(airQualityHistoryInput: $i) {
@@ -418,36 +418,36 @@ class Poller:
                 hours = 6 if device in self.last_backfill else 7 * 24
                 try:
                     n = await backfill(login, device, m["endpoint_id"], hours)
-                    log.info("Historie %s: %d Werte (%d Std.)", Settings.display(m), n, hours)
+                    log.info("History %s: %d values (%d h)", Settings.display(m), n, hours)
                 except Exception:
-                    log.exception("Historie für %s nicht geladen", Settings.display(m))
+                    log.exception("History for %s not loaded", Settings.display(m))
                 self.last_backfill[device] = time.time()
         state = await AlexaAPI.get_entity_state(login, entity_ids=[d for d, _ in enabled])
         rows = parse_state(state or {})
         if not rows:
-            log.warning("Keine Messwerte erhalten, prüfe Anmeldung")
+            log.warning("No readings received, checking sign-in")
             if await login.test_loggedin():
                 probe.persist_oauth(login)
             else:
                 await ACCOUNT.drop_session()
-                STATE.status, STATE.message = "login_required", "Amazon-Sitzung abgelaufen"
+                STATE.status, STATE.message = "login_required", "session_expired"
                 return
         else:
             store(rows)
             STATE.last_poll = time.time()
-            log.info("%d Werte gespeichert", len(rows))
+            log.info("%d values stored", len(rows))
         STATE.status, STATE.message = "ok", ""
 
     async def run(self) -> None:
         try:
             await ACCOUNT.restore()
         except Exception:
-            log.exception("Sitzung konnte nicht wiederhergestellt werden")
+            log.exception("Session could not be restored")
         while True:
             try:
                 await self.once()
             except Exception as ex:  # keep polling no matter what
-                log.exception("Abruf fehlgeschlagen")
+                log.exception("Polling failed")
                 STATE.status, STATE.message = "error", str(ex)
             WAKE.clear()
             try:
@@ -526,7 +526,7 @@ async def api_save_monitors(req: web.Request) -> web.Response:
 
 async def api_scan(_req: web.Request) -> web.Response:
     if ACCOUNT.login is None:
-        raise web.HTTPConflict(text="Nicht angemeldet")
+        raise web.HTTPConflict(text="not_logged_in")
     await discover(ACCOUNT.login)
     POLLER.last_scan = time.time()
     return web.json_response(SETTINGS.public())
@@ -536,7 +536,7 @@ async def api_account(req: web.Request) -> web.Response:
     body = await req.json()
     email, domain = str(body.get("email", "")).strip(), str(body.get("domain", "amazon.de"))
     if "@" not in email or domain not in MARKETPLACES:
-        raise web.HTTPBadRequest(text="Ungültige E-Mail oder Marktplatz")
+        raise web.HTTPBadRequest(text="invalid_account")
     if ACCOUNT.config().get("email") not in (None, email):
         await ACCOUNT.logout()  # different account -> old session is worthless
     ACCOUNT.save_account(email, domain)
@@ -550,12 +550,17 @@ async def login_page(_req: web.Request) -> web.Response:
     raise web.HTTPFound(await ACCOUNT.start_login())
 
 
-async def login_done(_req: web.Request) -> web.Response:
-    return web.Response(content_type="text/html", text="""<!doctype html><meta charset="utf-8">
-<title>Angemeldet</title><body style="font:15px -apple-system,system-ui;display:flex;align-items:center;
+async def login_done(req: web.Request) -> web.Response:
+    de = req.headers.get("Accept-Language", "").lower().startswith("de")
+    title, head, text = (("Angemeldet", "Erfolgreich angemeldet",
+                          "Du kannst dieses Fenster schließen – AirGlance sucht jetzt nach deinen Luftqualitätsmonitoren.")
+                         if de else
+                         ("Signed in", "Signed in successfully",
+                          "You can close this window – AirGlance is now looking for your air quality monitors."))
+    return web.Response(content_type="text/html", text=f"""<!doctype html><meta charset="utf-8">
+<title>{title}</title><body style="font:15px -apple-system,system-ui;display:flex;align-items:center;
 justify-content:center;height:90vh;color:#333;text-align:center"><div><div style="font-size:42px">✅</div>
-<h2 style="margin:8px 0">Erfolgreich angemeldet</h2><p style="color:#777">Du kannst dieses Fenster schließen –
-die App sucht jetzt nach deinen Luftqualitätsmonitoren.</p></div>""")
+<h2 style="margin:8px 0">{head}</h2><p style="color:#777">{text}</p></div>""")
 
 
 async def api_logout(_req: web.Request) -> web.Response:
@@ -618,7 +623,7 @@ async def parent_watchdog(parent: int) -> None:
     while True:
         await asyncio.sleep(3)
         if os.getppid() != parent:
-            log.info("App beendet – Backend fährt herunter")
+            log.info("App is gone – shutting down backend")
             os._exit(0)
 
 

@@ -66,6 +66,8 @@ if [ ! -x "$PYDIR/bin/python3" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$WANT" ]
   echo "==> Installing dependencies into the embedded Python"
   "$PYDIR/bin/python3" -m pip install -q --disable-pip-version-check --no-warn-script-location -r requirements.txt
   "$PYDIR/bin/python3" -m pip uninstall -q -y pip >/dev/null 2>&1 || true
+  # console scripts created by pip are not needed and contain the build machine's absolute path
+  for f in "$PYDIR"/bin/*; do case "$(basename "$f")" in python*) ;; *) rm -f "$f" ;; esac; done
   # drop parts of the standard library the app never uses (GUI toolkit, tests, IDLE, installers)
   L="$PYDIR/lib/python3.15"
   rm -rf "$L/test" "$L/idlelib" "$L/tkinter" "$L/turtledemo" "$L/ensurepip" "$L/lib2to3" \
